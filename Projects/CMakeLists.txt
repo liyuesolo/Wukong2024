@@ -1,0 +1,2 @@
+add_subdirectory(DiscreteShell)
+# add_subdirectory(FEM3D)

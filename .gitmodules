@@ -1,0 +1,6 @@
+[submodule "Deps/libigl"]
+	path = Deps/libigl
+	url = https://github.com/libigl/libigl/releases/tag/v2.5.0
+[submodule "Deps/polyscope"]
+	path = Deps/polyscope
+	url = https://github.com/nmwsharp/polyscope/tree/v2.1.0
