@@ -73,6 +73,10 @@ public:
             simulation.advanceOneStep(static_solve_step++);
             psMesh = polyscope::registerSurfaceMesh("surface mesh", simulation.surface_vertices, simulation.surface_indices);
         }
+        if (ImGui::Button("DerivativeTest")) 
+        {
+            simulation.checkTotalGradientScale(true);
+        }
         if (animate_modes && !run_sim)
         {
             t += 0.1;

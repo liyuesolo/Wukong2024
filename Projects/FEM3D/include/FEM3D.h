@@ -13,6 +13,7 @@
 #include <unordered_set>
 #include <complex>
 #include <iomanip>
+#include <ipc/ipc.hpp>
 
 #include "VecMatDef.h"
 #include "Timer.h"
@@ -42,7 +43,7 @@ public:
     using EleIdx = Vector<int, 4>;
 
 public:
-    T E = 1e3;
+    T E = 1e4;
     T nu = 0.48;
 
     T lambda, mu;
@@ -57,8 +58,6 @@ public:
     VectorXT deformed, undeformed; // tet nodes
     VectorXT u;
 
-
-
     bool run_diff_test = false;
     int max_newton_iter = 500;
     bool use_Newton = true;
@@ -72,6 +71,20 @@ public:
     std::unordered_map<int, int> tet_node_surface_map;
     std::unordered_map<int, int> surface_to_tet_node_map;
 
+    bool add_cubic_plane = false;
+    T w_plane = 1e3;
+
+    std::vector<std::vector<int>> vtx_tets;
+
+    bool use_ipc = false;
+    Eigen::MatrixXd ipc_vertices;
+    Eigen::MatrixXi ipc_edges, ipc_faces;
+    T ipc_barrier_distance = 1e-2;
+    T ipc_barrier_weight = 1e3;
+    T ipc_min_dis = 1.0;
+    T max_barrier_weight = 1e8;
+    ipc::CollisionMesh collision_mesh;
+
 private:
     template <class OP>
     void iterateDirichletDoF(const OP& f) 
@@ -80,156 +93,6 @@ private:
             f(dirichlet.first, dirichlet.second);
         } 
     }
-
-    // template<int dim = 2>
-    // void addForceEntry(VectorXT& residual, 
-    //     const std::vector<int>& vtx_idx, 
-    //     const VectorXT& gradent, int shift = 0)
-    // {
-    //     for (int i = 0; i < vtx_idx.size(); i++)
-    //         residual.template segment<dim>(vtx_idx[i] * dim + shift) += gradent.template segment<dim>(i * dim);
-    // }
-
-    // template<int dim = 2>
-    // void getSubVector(const VectorXT& _vector, 
-    //     const std::vector<int>& vtx_idx, 
-    //     VectorXT& sub_vec, int shift = 0)
-    // {
-    //     sub_vec.resize(vtx_idx.size() * dim);
-    //     sub_vec.setZero();
-    //     for (int i = 0; i < vtx_idx.size(); i++)
-    //     {
-    //         sub_vec.template segment<dim>(i * dim) = _vector.template segment<dim>(vtx_idx[i] * dim + shift);
-    //     }
-    // }
-
-    
-    // template<int dim_row=2, int dim_col=2>
-    // void addHessianEntry(
-    //     std::vector<Entry>& triplets,
-    //     const std::vector<int>& vtx_idx, 
-    //     const MatrixXT& hessian, 
-    //     int shift_row = 0, int shift_col=0)
-    // {
-        
-    //     for (int i = 0; i < vtx_idx.size(); i++)
-    //     {
-    //         int dof_i = vtx_idx[i];
-    //         for (int j = 0; j < vtx_idx.size(); j++)
-    //         {
-    //             int dof_j = vtx_idx[j];
-    //             for (int k = 0; k < dim_row; k++)
-    //                 for (int l = 0; l < dim_col; l++)
-    //                     triplets.emplace_back(
-    //                             dof_i * dim_row + k + shift_row, 
-    //                             dof_j * dim_col + l + shift_col, 
-    //                             hessian(i * dim_row + k, j * dim_col + l)
-    //                         );                
-    //         }
-    //     }
-    // }
-
-    // template<int dim_row=2, int dim_col=2>
-    // void addJacobianEntry(
-    //     std::vector<Entry>& triplets,
-    //     const std::vector<int>& vtx_idx,
-    //     const std::vector<int>& vtx_idx2, 
-    //     const MatrixXT& jacobian, 
-    //     int shift_row = 0, int shift_col=0)
-    // {
-        
-    //     for (int i = 0; i < vtx_idx.size(); i++)
-    //     {
-    //         int dof_i = vtx_idx[i];
-    //         for (int j = 0; j < vtx_idx2.size(); j++)
-    //         {
-    //             int dof_j = vtx_idx2[j];
-    //             for (int k = 0; k < dim_row; k++)
-    //                 for (int l = 0; l < dim_col; l++)
-    //                     triplets.emplace_back(
-    //                             dof_i * dim_row + k + shift_row, 
-    //                             dof_j * dim_col + l + shift_col, 
-    //                             jacobian(i * dim_row + k, j * dim_col + l)
-    //                         ); 
-    //         }
-    //     }
-    // }
-
-    // template<int dim_row=2, int dim_col=2>
-    // void addHessianMatrixEntry(
-    //     MatrixXT& matrix_global,
-    //     const std::vector<int>& vtx_idx, 
-    //     const MatrixXT& hessian,
-    //     int shift_row = 0, int shift_col=0)
-    // {
-    //     for (int i = 0; i < vtx_idx.size(); i++)
-    //     {
-    //         int dof_i = vtx_idx[i];
-    //         for (int j = 0; j < vtx_idx.size(); j++)
-    //         {
-    //             int dof_j = vtx_idx[j];
-    //             for (int k = 0; k < dim_row; k++)
-    //                 for (int l = 0; l < dim_col; l++)
-    //                 {
-    //                     matrix_global(dof_i * dim_row + k + shift_row, 
-    //                     dof_j * dim_col + l + shift_col) 
-    //                         += hessian(i * dim_row + k, j * dim_col + l);
-    //                 }
-    //         }
-    //     }
-    // }
-
-    // template<int dim_row=2, int dim_col=2>
-    // void addJacobianMatrixEntry(
-    //     MatrixXT& matrix_global,
-    //     const std::vector<int>& vtx_idx, 
-    //     const std::vector<int>& vtx_idx2, 
-    //     const MatrixXT& hessian,
-    //     int shift_row = 0, int shift_col=0)
-    // {
-    //     for (int i = 0; i < vtx_idx.size(); i++)
-    //     {
-    //         int dof_i = vtx_idx[i];
-    //         for (int j = 0; j < vtx_idx2.size(); j++)
-    //         {
-    //             int dof_j = vtx_idx2[j];
-    //             for (int k = 0; k < dim_row; k++)
-    //                 for (int l = 0; l < dim_col; l++)
-    //                 {
-    //                     matrix_global(dof_i * dim_row + k + shift_row, 
-    //                     dof_j * dim_col + l + shift_col) 
-    //                         += hessian(i * dim_row + k, j * dim_col + l);
-    //                 }
-    //         }
-    //     }
-    // }
-
-    // template<int dim0=2, int dim1=2>
-    // void addHessianBlock(
-    //     std::vector<Entry>& triplets,
-    //     const std::vector<int>& vtx_idx, 
-    //     const MatrixXT& hessian_block,
-    //     int shift_row = 0, int shift_col=0)
-    // {
-
-    //     int dof_i = vtx_idx[0];
-    //     int dof_j = vtx_idx[1];
-        
-    //     for (int k = 0; k < dim0; k++)
-    //         for (int l = 0; l < dim1; l++)
-    //         {
-    //             triplets.emplace_back(dof_i * dim0 + k + shift_row, 
-    //                 dof_j * dim1 + l + shift_col, 
-    //                 hessian_block(k, l));
-    //         }
-    // }
-
-    // template<int size>
-    // VectorXT computeHessianBlockEigenValues(const Matrix<T, size, size> & symMtr)
-    // {
-    //     Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, size, size>> eigenSolver(symMtr);
-    //     return eigenSolver.eigenvalues();
-    // }
 
     template <typename OP>
     void iterateElementSerial(const OP& f)
@@ -342,6 +205,14 @@ private:
         return t;
     }
     
+    std::vector<Entry> entriesFromSparseMatrix(const StiffnessMatrix &A) 
+    {
+        std::vector<Entry> triplets;
+        for (int k = 0; k < A.outerSize(); ++k)
+            for (StiffnessMatrix::InnerIterator it(A, k); it; ++it)
+                triplets.emplace_back(it.row(), it.col(), it.value());
+        return triplets;
+    }
 
 public:
     bool advanceOneStep(int step);
@@ -351,6 +222,9 @@ public:
     void buildSystemMatrix(StiffnessMatrix& K);
     T lineSearchNewton(const VectorXT& residual);
     void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
+
+    T vertexBlockDescent(const VectorXT& residual);
+    void buildVtxTetConnectivity();
 
     void computeLinearModes(MatrixXT& eigen_vectors, VectorXT& eigen_values);
     void initializeFromFile(const std::string& filename);
@@ -365,6 +239,23 @@ public:
     void addElasticForceEntries(VectorXT& residual);
     void addElasticHessianEntries(std::vector<Entry>& entries);
 
+    // Penalty.cpp
+    T addCubicPlaneEnergy(T w = 1.0);
+    void addCubicPlaneForceEntry(VectorXT& residual, T w = 1.0);
+    void addCubicPlaneHessianEntry(std::vector<Entry>& entries, T w = 1.0);
+
+    //DerivativeTest.cpp
+    void checkTotalGradient(bool perturb);
+    void checkTotalGradientScale(bool perturb);
+
+    // IPC.cpp
+    void buildIPCRestData();
+    T addIPCEnergy();
+    void addIPCForceEntries(VectorXT& residual);
+    void addIPCHessianEntries(std::vector<Entry>& entries);
+    void updateIPCVertices();
+    T computeCollisionFreeStepsize(const VectorXT& du);
+    void updateBarrierInfo(bool first_step);
 public:
     FEM3D() {}
     ~FEM3D() {}

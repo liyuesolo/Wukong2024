@@ -30,6 +30,7 @@ bool FEM3D::advanceOneStep(int step)
 
     T du_norm = 1e10;
     du_norm = lineSearchNewton(residual);
+    // vertexBlockDescent(residual);
     return false;
 }
 
@@ -133,6 +134,16 @@ T FEM3D::computeTotalEnergy()
 
     T energy = 0.0;
     energy += addElastsicPotential();
+    if (add_cubic_plane)
+    {
+        T cubic_term = addCubicPlaneEnergy(w_plane);
+        energy += cubic_term;
+    }
+    if (use_ipc)
+    {
+        T ipc_term = addIPCEnergy();
+        energy += ipc_term;
+    }
     return energy;
 }
 
@@ -140,6 +151,10 @@ T FEM3D::computeResidual(VectorXT& residual)
 {
     deformed = undeformed + u;
     addElasticForceEntries(residual);
+    if (add_cubic_plane)
+        addCubicPlaneForceEntry(residual, w_plane);
+    if (use_ipc)
+        addIPCForceEntries(residual);
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
         {
@@ -189,7 +204,11 @@ void FEM3D::buildSystemMatrix(StiffnessMatrix& K)
     std::vector<Entry> entries;
     
     addElasticHessianEntries(entries);
-    
+
+    if (add_cubic_plane)
+        addCubicPlaneHessianEntry(entries, w_plane);
+    if (use_ipc)
+        addIPCHessianEntries(entries);
     int n_dof = deformed.rows();
     K.resize(n_dof, n_dof);
     K.setFromTriplets(entries.begin(), entries.end());
@@ -207,6 +226,65 @@ void FEM3D::projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_m
         A.col(iter.first) *= 0.0;
         A.coeffRef(iter.first, iter.first) = 1.0;
     }
+}
+
+T FEM3D::vertexBlockDescent(const VectorXT& residual)
+{
+    Matrix<T, 4, 3> dNdb;
+        dNdb << -1.0, -1.0, -1.0, 
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, 1.0;
+           
+
+    StiffnessMatrix K(residual.rows(), residual.rows());
+    buildSystemMatrix(K);
+    for (int i = 0; i < num_nodes; i++)
+    {
+        T step_size = 1.0;
+        for (int tet_idx : vtx_tets[i])
+        {
+            EleNodes x_deformed = getEleNodesDeformed(indices.segment<4>(tet_idx * 4));
+            EleNodes x_undeformed = getEleNodesUndeformed(indices.segment<4>(tet_idx * 4));
+            TM dXdb = x_undeformed.transpose() * dNdb;
+            TM dxdb = x_deformed.transpose() * dNdb;
+            TM A = dxdb * dXdb.inverse();
+            T a, b, c, d;
+            a = A.determinant();
+            b = A(0, 0) * A(1, 1) - A(0, 1) * A(1, 0) + A(0, 0) * A(2, 2) - A(0, 2) * A(2, 0) + A(1, 1) * A(2, 2) - A(1, 2) * A(2, 1);
+            c = A.diagonal().sum();
+            d = 0.8;
+
+            T t = getSmallestPositiveRealCubicRoot(a, b, c, d);
+            if (t < 0 || t > 1) t = 1;
+            step_size = std::min(step_size, t);
+        }
+        TM vtx_hess = K.block(i * 3, i * 3, 3, 3);
+        TV vtx_grad = residual.segment<3>(i * 3);
+        TV dx = vtx_hess.colPivHouseholderQr().solve(vtx_grad);
+        if (dx.norm() < 1e-8) 
+            continue;
+        VectorXT u_current = u;
+        T E0 = computeTotalEnergy();
+        std::cout << "|dx| " << dx.transpose() << " step size " << step_size << std::endl;
+        int cnt = 0;
+        while (true)
+        {
+            u.segment<3>(i * 3) = u_current.segment<3>(i * 3) + step_size * dx;
+            T E1 = computeTotalEnergy();
+            std::cout << "E0 " << E0 << " E1 " << E1 << std::endl;
+            std::getchar();
+            if (E1 - E0 < 0 || cnt > 10)
+            {
+                if (cnt > 10)
+                    std::cout << "cnt > 10" << std::endl;
+                break;
+            }
+            step_size *= 0.5;
+            cnt += 1;
+        }
+    }
+    return residual.norm();
 }
 
 T FEM3D::lineSearchNewton(const VectorXT& residual)
@@ -237,6 +315,7 @@ T FEM3D::lineSearchNewton(const VectorXT& residual)
     {
         u = u_current + alpha * du;
         T E1 = computeTotalEnergy();
+        std::cout << "E0: " << E0 << " E1 " << E1 << std::endl;
         if (E1 - E0 < 0 || cnt > 10)
         {
             if (cnt > 10)
@@ -330,6 +409,41 @@ void FEM3D::initializeFromFile(const std::string& filename)
 
     surface_vertices = V;
     surface_indices = F;
+
+    add_cubic_plane = true;
+
+    for (int i = 0; i < num_nodes; i++)
+    {
+        TV xi = deformed.segment<3>(i * 3);
+        if (xi[1] < min_corner[1] + 1e-1)
+        {
+            dirichlet_data[i * 3] = 0.0;
+            dirichlet_data[i * 3 + 1] = 0.0;
+            dirichlet_data[i * 3 + 2] = 0.0;
+        }
+    }
+    buildVtxTetConnectivity();
+}
+
+void FEM3D::buildVtxTetConnectivity()
+{
+    vtx_tets.resize(num_nodes, std::vector<int>());
+    for (int i = 0; i < num_ele; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            vtx_tets[indices[i * 4 + j]].push_back(i);
+        }
+    }
+    // for (auto list : vtx_tets)
+    // {
+    //     std::cout << list.size() << std::endl;
+    //     for (auto idx : list)
+    //         std::cout << idx << " ";
+    //     std::cout << std::endl;
+    //     std::getchar();
+    // }
+    
 }
 
 void FEM3D::updateSurfaceVertices()
@@ -373,7 +487,7 @@ T FEM3D::computeInversionFreeStepsize()
             0.0, 1.0, 0.0,
             0.0, 0.0, 1.0;
            
-    VectorXT step_sizes = VectorXT::Zero(num_ele);
+    VectorXT step_sizes = VectorXT::Ones(num_ele);
 
     iterateElementParallel([&](const EleNodes& x_deformed, 
         const EleNodes& x_undeformed, const VtxList& indices, int tet_idx)

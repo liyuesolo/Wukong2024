@@ -183,4 +183,6 @@ Eigen::VectorXd computeHessianBlockEigenValues(const Matrix<T, size, size> & sym
     return eigenSolver.eigenvalues();
 }
 
+
+
 #endif

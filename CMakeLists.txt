@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.20)
 add_definitions(-w)
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
   message( FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there. You may need to remove CMakeCache.txt." )
@@ -32,6 +32,12 @@ endif()
 
 add_subdirectory("Deps/polyscope")
 
+include(libigl)
+# igl_include(imgui)
+# igl_include(glfw)
+# igl_include(opengl)
+igl_include(predicates)
+
 find_package(CGAL REQUIRED COMPONENTS Core)
 
 set(SuiteSparse_ROOT ${CMAKE_SOURCE_DIR}/../SuiteSparse-5.12.0)
@@ -43,6 +49,7 @@ add_definitions(-DMKL_LP64)
 
 include_directories(${CMAKE_SOURCE_DIR})
 include_directories(${MKLROOT}/include)
+
 
 add_subdirectory(Libs)
 add_subdirectory(Projects)
