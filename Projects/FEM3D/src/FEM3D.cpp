@@ -11,6 +11,58 @@
 #include "../autodiff/FEMEnergy.h"
 #include "../include/FEM3D.h"
 
+
+void FEM3D::graphColoring(const MatrixXT& V, const MatrixXi& TT) 
+{
+    // Get unique edges to build the graph
+    Eigen::MatrixXi EE;
+    igl::edges(TT, EE);
+    std::vector<std::vector<int>> adj(V.rows(), std::vector<int>());
+    // Build adjacency list from edges
+    for (int i = 0; i < EE.rows(); ++i) {
+        int v1 = EE(i, 0);
+        int v2 = EE(i, 1);
+
+        adj[v1].push_back(v2);
+        adj[v2].push_back(v1);
+    }
+
+    
+    int v = V.rows();
+    colors.resize(v); colors.setConstant(-1);
+    colors[0] = 0;
+ 
+    // boolean available vector tells which colour is available to
+    // to a particular vertex
+    std::vector<bool> available(v, false);
+    
+    // True value of available[clr] would mean that the color clr is
+    // assigned to one of its adjacent vertices
+
+
+    for (int u = 1; u < v; u++)
+    {
+        for (int i : adj[u])
+            if (colors[i] != -1)
+                available[colors[i]] = true;              
+        
+ 
+       
+        int clr;
+        for (clr = 0; clr < v; clr++)
+            if (available[clr] == false)
+                break;
+ 
+        colors[u] = clr;
+ 
+      // resetting the value of available for next iteration
+        for (int i : adj[u])
+            if (colors[i] != -1)
+                available[colors[i]] = false;
+    }
+
+
+}
 bool FEM3D::advanceOneStep(int step)
 {
     std::cout << "===================STEP " << step << "===================" << std::endl;
@@ -29,8 +81,11 @@ bool FEM3D::advanceOneStep(int step)
     }
 
     T du_norm = 1e10;
-    du_norm = lineSearchNewton(residual);
-    // vertexBlockDescent(residual);
+    
+    if (use_VBD)
+        vertexBlockDescent(residual);
+    else
+        du_norm = lineSearchNewton(residual);
     return false;
 }
 
@@ -144,6 +199,8 @@ T FEM3D::computeTotalEnergy()
         T ipc_term = addIPCEnergy();
         energy += ipc_term;
     }
+
+    energy -= f.dot(u);
     return energy;
 }
 
@@ -155,6 +212,7 @@ T FEM3D::computeResidual(VectorXT& residual)
         addCubicPlaneForceEntry(residual, w_plane);
     if (use_ipc)
         addIPCForceEntries(residual);
+    residual += f;
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
         {
@@ -228,6 +286,8 @@ void FEM3D::projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_m
     }
 }
 
+
+
 T FEM3D::vertexBlockDescent(const VectorXT& residual)
 {
     Matrix<T, 4, 3> dNdb;
@@ -235,55 +295,100 @@ T FEM3D::vertexBlockDescent(const VectorXT& residual)
             1.0, 0.0, 0.0,
             0.0, 1.0, 0.0,
             0.0, 0.0, 1.0;
-           
-
-    StiffnessMatrix K(residual.rows(), residual.rows());
-    buildSystemMatrix(K);
-    for (int i = 0; i < num_nodes; i++)
+    // if (coloring)
     {
-        T step_size = 1.0;
-        for (int tet_idx : vtx_tets[i])
+        int n_colors = colors.maxCoeff() + 1;   
+        for (int i = 0; i < n_colors; i++)
         {
-            EleNodes x_deformed = getEleNodesDeformed(indices.segment<4>(tet_idx * 4));
-            EleNodes x_undeformed = getEleNodesUndeformed(indices.segment<4>(tet_idx * 4));
-            TM dXdb = x_undeformed.transpose() * dNdb;
-            TM dxdb = x_deformed.transpose() * dNdb;
-            TM A = dxdb * dXdb.inverse();
-            T a, b, c, d;
-            a = A.determinant();
-            b = A(0, 0) * A(1, 1) - A(0, 1) * A(1, 0) + A(0, 0) * A(2, 2) - A(0, 2) * A(2, 0) + A(1, 1) * A(2, 2) - A(1, 2) * A(2, 1);
-            c = A.diagonal().sum();
-            d = 0.8;
-
-            T t = getSmallestPositiveRealCubicRoot(a, b, c, d);
-            if (t < 0 || t > 1) t = 1;
-            step_size = std::min(step_size, t);
-        }
-        TM vtx_hess = K.block(i * 3, i * 3, 3, 3);
-        TV vtx_grad = residual.segment<3>(i * 3);
-        TV dx = vtx_hess.colPivHouseholderQr().solve(vtx_grad);
-        if (dx.norm() < 1e-8) 
-            continue;
-        VectorXT u_current = u;
-        T E0 = computeTotalEnergy();
-        std::cout << "|dx| " << dx.transpose() << " step size " << step_size << std::endl;
-        int cnt = 0;
-        while (true)
-        {
-            u.segment<3>(i * 3) = u_current.segment<3>(i * 3) + step_size * dx;
-            T E1 = computeTotalEnergy();
-            std::cout << "E0 " << E0 << " E1 " << E1 << std::endl;
-            std::getchar();
-            if (E1 - E0 < 0 || cnt > 10)
+            tbb::parallel_for(0, num_nodes, [&](int vtx_idx)
             {
-                if (cnt > 10)
-                    std::cout << "cnt > 10" << std::endl;
-                break;
-            }
-            step_size *= 0.5;
-            cnt += 1;
+                if (colors[vtx_idx] != i)
+                    return;
+                for (int d = 0; d < 3; d++)
+                    if (dirichlet_data.find(vtx_idx * 3 + d) != dirichlet_data.end())
+                        return;
+                
+                
+                while (true)
+                {
+                    TM vtx_hess;
+                    TV vtx_force;
+                    computeHifi(vtx_idx, vtx_hess, vtx_force);
+                    if (vtx_force.norm() < 1e-8)
+                        break;
+                    TV dx = vtx_hess.fullPivLu().solve(vtx_force);
+                    T step_size = 1.0;
+                    TV ui = u.segment<3>(vtx_idx * 3);
+                    T E0 = computeGi(vtx_idx);
+                    int ls_iter = 0;
+                    for (; ls_iter < 8; ls_iter++)
+                    {
+                        u.segment<3>(vtx_idx * 3) = ui + step_size * dx;
+                        deformed = undeformed + u;
+                        T E1 = computeGi(vtx_idx);
+                        // std::cout << "E0 " << E0 << " E1 " << E1 << std::endl;
+                        // std::getchar();
+                        if (E1 < E0)
+                        // if (!std::isnan(E1))
+                            break;
+                        step_size *= 0.5;
+                    }
+                    break;
+                }
+                
+                
+            
+            });
         }
     }
+    
+    
+    // for (int i = 0; i < num_nodes; i++)
+    // {
+    //     if (dirichlet_data.find(i * 3 + 0) != dirichlet_data.end())
+    //         continue;
+    //     if (dirichlet_data.find(i * 3 + 1) != dirichlet_data.end())
+    //         continue;
+    //     if (dirichlet_data.find(i * 3 + 2) != dirichlet_data.end())
+    //         continue;
+        
+    //     TM vtx_hess;
+    //     TV vtx_force;
+    //     computeHifi(i, vtx_hess, vtx_force);
+
+    //     // T J = vtx_hess.determinant();
+        
+    //     // if (J < 1e-6)
+    //     //     continue;
+        
+    //     // TV dx = vtx_hess.inverse() * vtx_force;
+    //     TV dx = vtx_hess.fullPivLu().solve(vtx_force);
+    //     // std::cout << "|dxi| " << dx.transpose() << " fi " << vtx_force.transpose() << " hi " << vtx_hess << std::endl;
+    //     T step_size = 1.0;
+    //     TV ui = u.segment<3>(i * 3);
+    //     T E0 = computeGi(i);
+    //     // if (E0 < 1e-8)
+    //     //     continue;
+    //     int ls_iter = 0;
+    //     for (; ls_iter < 8; ls_iter++)
+    //     {
+    //         u.segment<3>(i * 3) = ui + step_size * dx;
+    //         deformed = undeformed + u;
+    //         T E1 = computeGi(i);
+    //         // std::cout << "E0 " << E0 << " E1 " << E1 << std::endl;
+    //         // std::getchar();
+    //         if (E1 < E0)
+    //         // if (!std::isnan(E1))
+    //             break;
+    //         step_size *= 0.5;
+    //     }
+    // }
+    if (!run_diff_test)
+        iterateDirichletDoF([&](int offset, T target)
+        {
+            u[offset] = 0;
+        });
+
     return residual.norm();
 }
 
@@ -392,6 +497,7 @@ void FEM3D::initializeFromFile(const std::string& filename)
     }
     Vtet *= scale;
 
+    
     num_nodes = Vtet.rows();
     undeformed.conservativeResize(num_nodes * 3);
     tbb::parallel_for(0, num_nodes, [&](int i)
@@ -400,6 +506,12 @@ void FEM3D::initializeFromFile(const std::string& filename)
     });
     deformed = undeformed;    
     u = deformed; u.setZero();
+    f = u; 
+    for (int i = 0; i < num_nodes; i++)
+    {
+        f[i*3+1] = -0.01;
+    }
+    
     num_ele = Ttet.rows();
     indices.resize(num_ele * 4);
     tbb::parallel_for(0, num_ele, [&](int i)
@@ -409,21 +521,104 @@ void FEM3D::initializeFromFile(const std::string& filename)
 
     surface_vertices = V;
     surface_indices = F;
-
-    add_cubic_plane = true;
+    computeBoundingBox(min_corner, max_corner);
+    std::cout << "BBOX " << min_corner.transpose() << " " << max_corner.transpose() << std::endl;
+    add_cubic_plane = false;
 
     for (int i = 0; i < num_nodes; i++)
     {
         TV xi = deformed.segment<3>(i * 3);
-        if (xi[1] < min_corner[1] + 1e-1)
+        if (xi[2] < min_corner[2] + 0.001 * (max_corner[2] - min_corner[2]))
         {
             dirichlet_data[i * 3] = 0.0;
             dirichlet_data[i * 3 + 1] = 0.0;
             dirichlet_data[i * 3 + 2] = 0.0;
         }
     }
+    // std::cout << dirichlet_data.size() << std::endl;
     buildVtxTetConnectivity();
+    // if (coloring)
+        graphColoring(Vtet, Ttet);
+    // std::cout << colors.maxCoeff() + 1 << std::endl;
+    max_newton_iter = 300000;
+
+    E = 1e3;
 }
+T FEM3D::computeGi(int vtx_idx)
+{
+    T gi = 0.0;
+    for (int tet_idx : vtx_tets[vtx_idx])
+    {
+        EleNodes x_deformed = getEleNodesDeformed(indices.segment<4>(tet_idx * 4));
+        EleNodes x_undeformed = getEleNodesUndeformed(indices.segment<4>(tet_idx * 4));
+        T ei = 0.0;
+        // computeLinearTet3DNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
+        computeStableNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
+        gi += ei;
+
+    }
+    if (add_cubic_plane)
+    {
+        TV xi = deformed.segment<3>(vtx_idx * 3);
+        if (xi[1] > 0.2)
+            gi += w_plane * std::pow(xi[1] - 0.2, 3);
+    }
+    gi -= f.segment<3>(vtx_idx * 3).dot(u.segment<3>(vtx_idx * 3));
+    return gi;
+}
+void FEM3D::computeHifi(int vtx_idx, TM& hess, TV& force)
+{
+    force.setZero();
+    hess.setZero(); 
+    for (int tet_idx : vtx_tets[vtx_idx])
+    {
+        EleNodes x_deformed = getEleNodesDeformed(indices.segment<4>(tet_idx * 4));
+        EleNodes x_undeformed = getEleNodesUndeformed(indices.segment<4>(tet_idx * 4));
+        Vector<T, 12> dedx;
+        // computeLinearTet3DNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
+        computeStableNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
+        Matrix<T, 12, 12> hessian;
+        // computeLinearTet3DNeoHookeanEnergyHessian(E, nu, x_deformed, x_undeformed, hessian);
+        computeStableNeoHookeanEnergyHessian(E, nu, x_deformed, x_undeformed, hessian);
+        int ni = -1;
+        for (int node_cnt = 0; node_cnt < 4; node_cnt++)
+            if (indices[tet_idx * 4 + node_cnt] == vtx_idx)
+                ni = node_cnt;
+        
+        force += -dedx.segment<3>(ni * 3);
+        hess += hessian.block(ni * 3, ni * 3, 3, 3);
+
+    }
+    force += f.segment<3>(vtx_idx * 3);
+    if (add_cubic_plane)
+    {
+        TV xi = deformed.segment<3>(vtx_idx * 3);
+        if (xi[1] > 0.2)
+        {
+            force[1] += -w_plane * 3.0 * std::pow(xi[1] - 0.2, 2);
+            hess(1, 1) += w_plane * 6.0 * (xi[1] - 0.2);
+        }
+    }
+}
+void FEM3D::saveTetsAroundVtx(int vtx_idx)
+{
+    for (int i = 0; i < vtx_tets[vtx_idx].size(); i++)
+    {
+        std::ofstream out("tet" + std::to_string(i)+".obj");
+        EleIdx tet_idx = indices.segment<4>(vtx_tets[vtx_idx][i] * 4);
+        EleNodes tet_deformed = getEleNodesDeformed(tet_idx);
+        for (int j = 0; j < 4; j++)
+        {
+            out << "v " << tet_deformed.row(j) << std::endl;
+        }
+        out << "f 1 2 4"<<std::endl;
+        out << "f 2 3 4"<<std::endl;
+        out << "f 3 1 4"<<std::endl;
+        out << "f 1 3 2"<<std::endl;
+        out.close();
+    }   
+}
+
 
 void FEM3D::buildVtxTetConnectivity()
 {
@@ -435,6 +630,7 @@ void FEM3D::buildVtxTetConnectivity()
             vtx_tets[indices[i * 4 + j]].push_back(i);
         }
     }
+    // saveTetsAroundVtx(0);
     // for (auto list : vtx_tets)
     // {
     //     std::cout << list.size() << std::endl;
@@ -517,7 +713,8 @@ T FEM3D::addElastsicPotential()
         const EleNodes& x_undeformed, const VtxList& indices, int tet_idx)
     {
         T ei = 0.0;
-        computeLinearTet3DNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
+        // computeLinearTet3DNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
+        computeStableNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
         energies_neoHookean[tet_idx] += ei;
         // if (std::isnan(ei))
         // {
@@ -537,7 +734,8 @@ void FEM3D::addElasticForceEntries(VectorXT& residual)
         // if (volume < 1e-8)
         //     return;
         Vector<T, 12> dedx;
-        computeLinearTet3DNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
+        // computeLinearTet3DNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
+        computeStableNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
         addForceEntry<3>(residual, indices, -dedx);
         // std::cout << dedx.transpose() << std::endl;
     });
@@ -553,7 +751,8 @@ void FEM3D::addElasticHessianEntries(std::vector<Entry>& entries)
         // if (volume < 1e-8)
         //     return;
         Matrix<T, 12, 12> hessian, hessian_ad;
-        computeLinearTet3DNeoHookeanEnergyHessian(E, nu, x_deformed, x_undeformed, hessian);
+        // computeLinearTet3DNeoHookeanEnergyHessian(E, nu, x_deformed, x_undeformed, hessian);
+        computeStableNeoHookeanEnergyHessian(E, nu, x_deformed, x_undeformed, hessian);
         addHessianEntry<3, 3>(entries, indices, hessian);
     });
 }

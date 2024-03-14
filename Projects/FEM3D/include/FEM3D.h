@@ -56,7 +56,7 @@ public:
     
     VectorXi indices;// tet indices
     VectorXT deformed, undeformed; // tet nodes
-    VectorXT u;
+    VectorXT u, f;
 
     bool run_diff_test = false;
     int max_newton_iter = 500;
@@ -75,6 +75,9 @@ public:
     T w_plane = 1e3;
 
     std::vector<std::vector<int>> vtx_tets;
+    bool use_VBD = false;
+    bool coloring = false;
+    VectorXi colors;
 
     bool use_ipc = false;
     Eigen::MatrixXd ipc_vertices;
@@ -144,6 +147,19 @@ private:
             if (idx >= undeformed.rows())
                 std::cout << "idx out of bound " << std::endl;
             tet_x.row(i) = undeformed.segment<3>(idx);
+        }
+        return tet_x;
+    }
+
+    EleNodes getEleNodesFromVector(const EleIdx& nodal_indices, const VectorXT& vec)
+    {
+        EleNodes tet_x;
+        for (int i = 0; i < 4; i++)
+        {
+            int idx = nodal_indices[i]*3;
+            if (idx >= vec.rows())
+                std::cout << "idx out of bound " << std::endl;
+            tet_x.row(i) = vec.segment<3>(idx);
         }
         return tet_x;
     }
@@ -225,6 +241,10 @@ public:
 
     T vertexBlockDescent(const VectorXT& residual);
     void buildVtxTetConnectivity();
+    void saveTetsAroundVtx(int vtx_idx);
+    T computeGi(int vtx_idx);
+    void computeHifi(int vtx_idx, TM& hess, TV& force);
+    void graphColoring(const MatrixXT& V, const MatrixXi& TT);
 
     void computeLinearModes(MatrixXT& eigen_vectors, VectorXT& eigen_values);
     void initializeFromFile(const std::string& filename);
