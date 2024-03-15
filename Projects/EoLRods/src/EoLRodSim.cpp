@@ -1,4 +1,4 @@
-#include <Eigen/SparseCore>
+#include <Eigen/CholmodSupport>
 #include <fstream>
 #include <chrono>
 #include <iomanip>
@@ -214,8 +214,7 @@ void EoLRodSim::fixCrossing()
 }
 
 
-T EoLRodSim::computeTotalEnergy(Eigen::Ref<const VectorXT> dq, 
-        bool verbose)
+T EoLRodSim::computeTotalEnergy(bool verbose)
 {
     VectorXT dq_projected = dq;
     
@@ -270,7 +269,7 @@ T EoLRodSim::computeTotalEnergy(Eigen::Ref<const VectorXT> dq,
 
 
 
-T EoLRodSim::computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<const VectorXT> dq)
+T EoLRodSim::computeResidual(Eigen::Ref<VectorXT> residual)
 {
     VectorXT dq_projected = dq;
     if(!add_penalty && !run_diff_test)
@@ -334,8 +333,7 @@ T EoLRodSim::computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<const Vec
 }
 
 
-void EoLRodSim::addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K,
-         Eigen::Ref<const VectorXT> dq)
+void EoLRodSim::addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K)
 {
     VectorXT dq_projected = dq;
     if(!add_penalty && !run_diff_test)
@@ -372,11 +370,10 @@ void EoLRodSim::addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K,
 }
 
 
-void EoLRodSim::buildSystemDoFMatrix(
-    Eigen::Ref<const VectorXT> dq, StiffnessMatrix& K)
+void EoLRodSim::buildSystemDoFMatrix(StiffnessMatrix& K)
 {
     std::vector<Entry> entry_K;
-    addStiffnessMatrix(entry_K, dq);
+    addStiffnessMatrix(entry_K);
     StiffnessMatrix A(deformed_states.rows(), deformed_states.rows());
 
     A.setFromTriplets(entry_K.begin(), entry_K.end());
@@ -416,65 +413,97 @@ void EoLRodSim::projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unorder
 }
 
 bool EoLRodSim::linearSolve(StiffnessMatrix& K, 
-    Eigen::Ref<const VectorXT> residual, Eigen::Ref<VectorXT> ddq)
+    const VectorXT& residual, VectorXT& du)
 {
+    START_TIMING(LinearSolve)
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
     
-    StiffnessMatrix I(K.rows(), K.cols());
-    I.setIdentity();
-
-    StiffnessMatrix H = K;
-    // Eigen::SimplicialLLT<StiffnessMatrix> solver;
-    Eigen::SimplicialLDLT<StiffnessMatrix> solver;
-    
-    T mu = 10e-6;
+    T alpha = 1e-6;
+    StiffnessMatrix H(K.rows(), K.cols());
+    H.setIdentity(); H.diagonal().array() = 1e-10;
+    K += H;
     solver.analyzePattern(K);
-    for (int i = 0; i < 50; i++)
+    
+    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+    int i = 0;
+    T dot_dx_g = 0.0;
+    for (; i < 50; i++)
     {
         solver.factorize(K);
+        // std::cout << "factorize" << std::endl;
         if (solver.info() == Eigen::NumericalIssue)
         {
-            K = H + mu * I;        
-            mu *= 10;
+            K.diagonal().array() += alpha;
+            alpha *= 10;
+            indefinite_count_reg_cnt++;
             continue;
         }
-        ddq = solver.solve(residual);
 
-        T dot_dx_g = ddq.normalized().dot(residual.normalized());
-
-        VectorXT d_vector = solver.vectorD();
-        int num_negative_eigen_values = 0;
-
-        for (int i = 0; i < d_vector.size(); i++)
-        {
-            if (d_vector[i] < 0)
-            {
-                num_negative_eigen_values++;
-                break;
-            }
+        du = solver.solve(residual);
         
-        }
+        dot_dx_g = du.normalized().dot(residual.normalized());
+
+        int num_negative_eigen_values = 0;
+        int num_zero_eigen_value = 0;
+
         bool positive_definte = num_negative_eigen_values == 0;
         bool search_dir_correct_sign = dot_dx_g > 1e-6;
-        bool solve_success = (K*ddq - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        if (!search_dir_correct_sign)
+        {   
+            invalid_search_dir_cnt++;
+        }
+        
+        // bool solve_success = true;
+        // bool solve_success = (K * du - residual).norm() / residual.norm() < 1e-6;
+        bool solve_success = du.norm() < 1e3;
+        
+        if (!solve_success)
+            invalid_residual_cnt++;
+        // std::cout << "PD: " << positive_definte << " direction " 
+        //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
 
         if (positive_definte && search_dir_correct_sign && solve_success)
-            break;
+        {
+            
+            if (verbose)
+            {
+                std::cout << "\t===== Linear Solve ===== " << std::endl;
+                std::cout << "\tnnz: " << K.nonZeros() << std::endl;
+                // std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
+                std::cout << "\t# regularization step " << i 
+                    << " indefinite " << indefinite_count_reg_cnt 
+                    << " invalid search dir " << invalid_search_dir_cnt
+                    << " invalid solve " << invalid_residual_cnt << std::endl;
+                std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+                std::cout << "\t======================== " << std::endl;
+                FINISH_TIMING_PRINT(LinearSolve)
+            }
+            return true;
+        }
         else
         {
-            K = H + mu * I;        
-            mu *= 10;
+            K.diagonal().array() += alpha;
+            alpha *= 10;
         }
     }
-
-    return true;
+    if (verbose)
+    {
+        std::cout << "\t===== Linear Solve ===== " << std::endl;
+        std::cout << "\tnnz: " << K.nonZeros() << std::endl;
+        // std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
+        std::cout << "\t# regularization step " << i 
+            << " indefinite " << indefinite_count_reg_cnt 
+            << " invalid search dir " << invalid_search_dir_cnt
+            << " invalid solve " << invalid_residual_cnt << std::endl;
+        std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+        std::cout << "\t======================== " << std::endl;
+        FINISH_TIMING_PRINT(LinearSolve)
+    }
+    return false;
 }
 
 
-
-
-T EoLRodSim::lineSearchNewton(Eigen::Ref<VectorXT> dq, 
-        Eigen::Ref<const VectorXT> residual, 
-        int line_search_max)
+T EoLRodSim::lineSearchNewton(const VectorXT& residual)
 {
     bool debug = true;
     bool verbose = false;
@@ -483,84 +512,33 @@ T EoLRodSim::lineSearchNewton(Eigen::Ref<VectorXT> dq,
     ddq.setZero();
 
     StiffnessMatrix K;
-    buildSystemDoFMatrix(dq, K);
+    buildSystemDoFMatrix(K);
     bool success = linearSolve(K, residual, ddq);
     if (!success)
         return 1e16;
 
-    // T norm = ddq.cwiseAbs().maxCoeff();
     T norm = ddq.norm();
     // std::cout << norm << std::endl;
     // if (norm < 1e-6) return norm;
     T alpha = 1;
-    T E0 = computeTotalEnergy(dq);
+    T E0 = computeTotalEnergy();
     // std::cout << "E0: " << E0 << std::endl;
     int cnt = 0;
-    bool set_to_gradient = true;
     std::vector<T> Es;
+    VectorXT dq_current = dq;
     while(true)
     {
-        VectorXT dq_ls = dq + alpha * ddq;
-        T E1 = computeTotalEnergy(dq_ls, verbose);
+        dq = dq_current + alpha * ddq;
+        T E1 = computeTotalEnergy(verbose);
         if (debug)
             Es.push_back(E1);
         // std::cout << "E1: " << E1 << std::endl;
-        if (E1 - E0 < 0) {
-            dq = dq_ls;
-            // return 1e16;
-            // testGradient(dq);
-            // testHessian(dq);
+        if (E1 - E0 < 0) 
             break;
-        }
         alpha *= T(0.5);
         cnt += 1;
-        if (cnt > 15)
-        {
-            
-            // checkHessianPD(dq);
-            // for(T a = 1.0; a > 1e-8; a*=0.5)
-            // {
-            //     T E_grad = computeTotalEnergy(dq + a * residual, verbose);
-            //     if (E_grad < E0)
-            //         std::cout << "take gradient" << std::endl;
-            //         // dq_ls = dq + a * residual;
-            //     // std::cout << "E_grad " << std::setprecision(15) << E_grad << std::endl;
-            // }
-            
-            // std::cout << "E0 " << std::setprecision(15) << E0 << std::endl;
-            // for (T E : Es)
-            //     std::cout << std::setprecision(15) << E << " ";
-            // std::cout << std::endl;
-            // std::cout << residual.norm() << std::endl;
-            // std::getchar();
-            // testGradient(dq);
-            // testHessian(dq);
-            // return 1e16;
-            // computeSmallestEigenVector(K, dq_ls);
-            // std::cout << ddq.norm() << std::endl;
-            // std::cout << ddq.normalized().dot(residual.normalized()) << std::endl;
-            // std::cout << residual.norm() << std::endl;
-            // std::getchar();
-            // for (auto& crossing : rod_crossings)
-            // // for (int i = 0; i < 10; i++)
-            // {
-            //     // auto crossing = rod_crossings[i];
-            //     Offset off;
-            //     Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
-            //     T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
-            //     int z_off = Rods[crossing->rods_involved.front()]->reduced_map[off[3-1]];
-            //     dq_ls[z_off] += 0.001 * (r - 0.5) * unit;
-            //     // break;
-            //     // dq[z_off] += 0.001 * r * unit;
-                
-            // }
-            dq = dq_ls;
+        if (cnt > ls_max)
             break;
-        }
-        if (cnt == line_search_max) 
-            break;
-            // return 1e16;
-            
     }
     
     for (auto& crossing : rod_crossings)
@@ -575,7 +553,7 @@ T EoLRodSim::lineSearchNewton(Eigen::Ref<VectorXT> dq,
 }
 
 
-bool EoLRodSim::staticSolve(Eigen::Ref<VectorXT> dq)
+bool EoLRodSim::staticSolve()
 {
     int cnt = 0;
     T residual_norm = 1e10, dq_norm = 1e10;
@@ -593,7 +571,7 @@ bool EoLRodSim::staticSolve(Eigen::Ref<VectorXT> dq)
         }
 
         
-        computeResidual(residual, dq);
+        computeResidual(residual);
 
         // auto f_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::high_resolution_clock::now() - time ).count();
 
@@ -607,11 +585,9 @@ bool EoLRodSim::staticSolve(Eigen::Ref<VectorXT> dq)
         if (residual_norm < newton_tol)
             break;
         
-        dq_norm = lineSearchNewton(dq, residual, 50);
+        dq_norm = lineSearchNewton(residual);
 
-        // auto newton_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::high_resolution_clock::now() - time ).count();
-        // std::cout << f_time / 1000.0 << " " << newton_time / 1000.0 << std::endl;
-        // std::getchar();
+
         if(cnt == max_newton_iter || dq_norm > 1e10)
             break;
         cnt++;
@@ -661,14 +637,14 @@ void EoLRodSim::computeSmallestEigenVector(const StiffnessMatrix& K,
 }
 
 
-void EoLRodSim::checkHessianPD(Eigen::Ref<const VectorXT> dq)
+void EoLRodSim::checkHessianPD(const VectorXT& dq)
 {
     bool compute_position_sub_hessian_evs = false;
 
     int nmodes = 10;
 
     StiffnessMatrix K;
-    buildSystemDoFMatrix(dq, K);
+    buildSystemDoFMatrix(K);
     // K.conservativeResize(Rods[0]->theta_reduced_dof_start_offset, Rods[0]->theta_reduced_dof_start_offset);
     // K.conservativeResize(rod_crossings[0]->reduced_dof_offset, rod_crossings[0]->reduced_dof_offset);
     
@@ -789,7 +765,7 @@ void EoLRodSim::checkHessianPD(Eigen::Ref<const VectorXT> dq)
 bool EoLRodSim::forward(Eigen::Ref<VectorXT> dq)
 {
     
-    bool succeed = staticSolve(dq);
+    bool succeed = staticSolve();
     if (!succeed)
         return false;
     
@@ -820,62 +796,22 @@ void EoLRodSim::staticSolveIncremental(int step)
 
 bool EoLRodSim::advanceOneStep(int step)
 {
-    // newton_tol = 1e-6;
-    n_dof = W.cols();
-    VectorXT dq(n_dof);
-    dq.setZero();
-    
-    // checkHessianPD(dq);
-    // return;
+    std::cout << "===================STEP " << step << "===================" << std::endl;
+    VectorXT residual;
+    residual.resize(W.cols());
+    residual.setZero();
+    T residual_norm = computeResidual(residual);
+    residual_norms.push_back(residual_norm);
+    std::cout << "[NEWTON] iter " << step << "/" 
+        << max_newton_iter << ": residual_norm " 
+        << residual_norm << " tol: " << newton_tol << std::endl;
 
-    staticSolve(dq);
-    
-    VectorXT dq_projected = dq;
+    if (residual_norm < newton_tol || step == max_newton_iter)
+    {
+        return true;
+    }
 
-    iterateDirichletDoF([&](int offset, T target){
-            dq_projected[offset] = target;
-        });
-    deformed_states = rest_states + W * dq_projected;
-    
-    
-    T e_total = 0.0;
-    if (add_stretching)
-        e_total += addStretchingEnergy();
-    e_total += add3DBendingAndTwistingEnergy();
-    if (add_pbc)
-        e_total += add3DPBCBendingAndTwistingEnergy();
-    e_total += addJointBendingAndTwistingEnergy();
-    
-
-    std::cout << "E total: " << e_total << std::endl;
-    std::cout << "total stretching " << addStretchingEnergy() << std::endl;
-    std::cout << "total bending " << add3DBendingAndTwistingEnergy(true, false) + 
-                                    add3DPBCBendingAndTwistingEnergy(true, false) + 
-                                    addJointBendingAndTwistingEnergy(true, false) << std::endl;
-
-    std::cout << "total twist " << add3DBendingAndTwistingEnergy(false, true) + 
-                                    add3DPBCBendingAndTwistingEnergy(false, true) + 
-                                    addJointBendingAndTwistingEnergy(false, true) << std::endl;
-    
-    
-    // checkHessianPD(dq);
-
-    // VectorXT force(W.rows()); force.setZero();
-    // addPBCForce(force);
-
-
-    // TV fi = force.template segment<3>(pbc_pairs_reference[0].first.first[0]);
-    // TV fj = force.template segment<3>(pbc_pairs_reference[1].first.first[0]);
-
-    // // std::cout << fi.transpose() << " " << fj.transpose() << " " << std::endl;
-
-    // for (auto& rod : Rods)
-    // {
-    //     rod->reference_angles = deformed_states.template segment(rod->theta_dof_start_offset, 
-    //         rod->indices.size() - 1);
-    //     VectorXT reference_twist = rod->reference_twist + rod->reference_angles;
-    //     // std::cout << rod->reference_angles.transpose() << std::endl;
-    //     // std::cout << reference_twist.transpose() << std::endl;
-    // }
-    return true;
+    T du_norm = 1e10;
+    du_norm = lineSearchNewton(residual);
+    return false;
 }

@@ -203,6 +203,9 @@ void Scene::buildInterlockingSquareScene(int sub_div)
         
     }
     sim.boundary_spheres.push_back(std::make_pair(center0, r));   
+
+    sim.dq = sim.rest_states;
+    sim.dq.setZero();
 }
 
 void Scene::clearSimData()

@@ -6,7 +6,7 @@ int main()
     EoLRodSim sim;
     Scene scene(sim);
     scene.buildInterlockingSquareScene(32);
-
+    
     App<EoLRodSim> app(sim);
     app.initializeScene();
     app.run();

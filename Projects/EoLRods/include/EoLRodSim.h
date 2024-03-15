@@ -11,7 +11,7 @@
 #include "VecMatDef.h"
 
 #include "RestState.h"
-
+#include "Timer.h"
 #include "Rod.h"
 
 #define WARP 0
@@ -92,6 +92,8 @@ public:
     VectorXT deformed_states;
     VectorXT rest_states;
 
+    VectorXT dq;
+
     VectorXT perturb;
 
     IV3Stack rods;
@@ -102,6 +104,8 @@ public:
     int n_rods;
     int n_pb_cons;
     int incremental_steps = 0;
+    int max_newton_iter = 500;
+    int ls_max = 12;
 
     IV2 n_rod_uv;
     
@@ -199,6 +203,8 @@ public:
 
     // inverse
     std::vector<TV> targets;
+
+    std::vector<T> residual_norms;
 public:
 
     EoLRodSim()
@@ -342,34 +348,29 @@ public:
         }
     }
 
-    T computeTotalEnergy(Eigen::Ref<const VectorXT> dq, 
-        bool verbose = false);
+    T computeTotalEnergy(bool verbose = false);
 
-    T computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<const VectorXT> dq);
+    T computeResidual(Eigen::Ref<VectorXT> residual);
     
     
     void projectDirichletDoFSystemMatrix(StiffnessMatrix& A);
 
     void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
 
-    void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K,
-         Eigen::Ref<const VectorXT> dq);
+    void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K);
         
     
-    void buildSystemDoFMatrix(Eigen::Ref<const VectorXT> dq, StiffnessMatrix& K);
+    void buildSystemDoFMatrix(StiffnessMatrix& K);
 
-    bool linearSolve(StiffnessMatrix& K, 
-        Eigen::Ref<const VectorXT> residual, Eigen::Ref<VectorXT> ddq);
+    bool linearSolve(StiffnessMatrix& K, const VectorXT& residual, VectorXT& du);
 
-    T lineSearchNewton(Eigen::Ref<VectorXT> dq, 
-        Eigen::Ref<const VectorXT> residual, 
-        int line_search_max = 100);
+    T lineSearchNewton(const VectorXT& residual);
 
-    void checkHessianPD(Eigen::Ref<const VectorXT> dq);
+    void checkHessianPD(const VectorXT& dq);
 
     void computeSmallestEigenVector(const StiffnessMatrix& K, Eigen::Ref<VectorXT> eigen_vector);
 
-    bool staticSolve(Eigen::Ref<VectorXT> dq);
+    bool staticSolve();
 
     void staticSolveIncremental(int step);
 
