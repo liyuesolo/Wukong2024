@@ -139,16 +139,17 @@ void EoLRodSim::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
                     for(int i = 0; i < 3; i++)
                         for (int j = 0; j < 3; j++)
                             {
-                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], offsets[l][j], -J(k*3 + i, l * 3 + j)));
 
-                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], offsets[l][3], -J(k*3 + i, 3 * 3 + l * 3 + j) * dXdu[l][j]));
+                                entry_K.emplace_back(offsets[k][i], offsets[l][j], -J(k*3 + i, l * 3 + j));
 
-                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][3], offsets[l][j], -J(3 * 3 + k * 3 + i, l * 3 + j) * dXdu[k][i]));
+                                entry_K.emplace_back(offsets[k][i], offsets[l][3], -J(k*3 + i, 3 * 3 + l * 3 + j) * dXdu[l][j]);
+
+                                entry_K.emplace_back(offsets[k][3], offsets[l][j], -J(3 * 3 + k * 3 + i, l * 3 + j) * dXdu[k][i]);
 
                                 
-                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][3], 
+                                entry_K.emplace_back(offsets[k][3], 
                                                                     offsets[l][3], 
-                                                                    -J(3 * 3 + k*3 + i, 3 * 3 + l * 3 + j) * dXdu[l][j] * dXdu[k][i]));
+                                                                    -J(3 * 3 + k*3 + i, 3 * 3 + l * 3 + j) * dXdu[l][j] * dXdu[k][i]);
 
                             }
             for(int k = 0; k < nodes.size(); k++)
@@ -158,17 +159,16 @@ void EoLRodSim::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
                     {
                         for(int i = 0; i < 3; i++)
                         {
-                            entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], theta_dofs[j], -J(k*3 + i, 18 + j)));
-                            entry_K.push_back(Eigen::Triplet<T>(theta_dofs[j], offsets[k][i], -J(18 + j, k * 3 + i)));
-
-                            entry_K.push_back(Eigen::Triplet<T>(offsets[k][3], theta_dofs[j], -J(3 * 3 + k * 3 + i, 18 + j) * dXdu[k][i]));
-                            entry_K.push_back(Eigen::Triplet<T>(theta_dofs[j], offsets[k][3], -J(18 + j, 3 * 3 + k * 3 + i) * dXdu[k][i]));
+                            entry_K.emplace_back(offsets[k][i], theta_dofs[j], -J(k*3 + i, 18 + j));
+                            entry_K.emplace_back(theta_dofs[j], offsets[k][i], -J(18 + j, k * 3 + i));
+                            entry_K.emplace_back(offsets[k][3], theta_dofs[j], -J(3 * 3 + k * 3 + i, 18 + j) * dXdu[k][i]);
+                            entry_K.emplace_back(theta_dofs[j], offsets[k][3], -J(18 + j, 3 * 3 + k * 3 + i) * dXdu[k][i]);
                         }
                     }
                 }
             for (int i = 0; i < 2; i++)
                 for (int j = 0; j < 2; j++)
-                    entry_K.push_back(Eigen::Triplet<T>(theta_dofs[i], theta_dofs[j], -J(18 + i, 18 + j)));
+                    entry_K.emplace_back(theta_dofs[i], theta_dofs[j], -J(18 + i, 18 + j));
         });
         
     }
@@ -204,12 +204,12 @@ void EoLRodSim::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
 
             for(int d = 0; d < 3; d++)
             {
-                entry_K.push_back(Eigen::Triplet<T>(offset_i[3], 
-                                    offset_i[3], -F[1*3 + 3*3 + d] * ddXi[d]));
-                entry_K.push_back(Eigen::Triplet<T>(offset_j[3], 
-                                    offset_j[3], -F[2*3 + 3*3 + d] * ddXj[d]));
-                entry_K.push_back(Eigen::Triplet<T>(offset_k[3], 
-                                    offset_k[3], -F[0*3 + 3*3 + d] * ddXk[d]));
+                entry_K.emplace_back(offset_i[3], 
+                                    offset_i[3], -F[1*3 + 3*3 + d] * ddXi[d]);
+                entry_K.emplace_back(offset_j[3], 
+                                    offset_j[3], -F[2*3 + 3*3 + d] * ddXj[d]);
+                entry_K.emplace_back(offset_k[3], 
+                                    offset_k[3], -F[0*3 + 3*3 + d] * ddXk[d]);
                 std::cout << ddXk[d] << std::endl;
             }
         });

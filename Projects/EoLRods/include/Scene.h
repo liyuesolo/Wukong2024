@@ -31,7 +31,9 @@ public:
     
     // ------------------------------- Scene Setup -------------------------------
     void buildInterlockingSquareScene(int sub_div);
-
+    void buildStraightRodScene(int sub_div);
+    void buildGridScene(int sub_div);
+    void buildFullScaleSquareScene(int sub_div);
 
 private:
 

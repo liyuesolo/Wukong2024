@@ -356,9 +356,6 @@ public:
     void projectDirichletDoFSystemMatrix(StiffnessMatrix& A);
 
     void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
-
-    void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K);
-        
     
     void buildSystemDoFMatrix(StiffnessMatrix& K);
 

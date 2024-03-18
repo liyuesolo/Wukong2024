@@ -105,46 +105,46 @@ void EoLRodSim::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                             for (int i = 0; i < 3; i++)
                                 for (int j = 0; j < 3; j++)
                                 {
-                                    entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], offsets1[l][j], J0(k*3 + i, l * 3 + j)));
-                                    entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], offsets1[l][3], J0(k*3 + i, 2 * 3 + l * 3 + j) * dXdu1[l][j]));
-                                    // entry_K.push_back(Eigen::Triplet<T>(offsets1[l][3], offsets1[k][i], J0(2 * 3 + l * 3 + j, k*3 + i) * dXdu1[l][j]));
-                                    entry_K.push_back(Eigen::Triplet<T>(offsets1[k][3], offsets1[l][j], J0(2 * 3 + k * 3 + i, l*3 + j) * dXdu1[k][i]));
-                                    entry_K.push_back(Eigen::Triplet<T>(offsets1[k][3], offsets1[l][3], J0(2 * 3 + k*3 + i, 2 * 3 + l * 3 + j) * dXdu1[l][j] * dXdu1[k][i]));
+                                    entry_K.emplace_back(offsets1[k][i], offsets1[l][j], J0(k*3 + i, l * 3 + j));
+                                    entry_K.emplace_back(offsets1[k][i], offsets1[l][3], J0(k*3 + i, 2 * 3 + l * 3 + j) * dXdu1[l][j]);
+                                    // entry_K.emplace_back(offsets1[l][3], offsets1[k][i], J0(2 * 3 + l * 3 + j, k*3 + i) * dXdu1[l][j]));
+                                    entry_K.emplace_back(offsets1[k][3], offsets1[l][j], J0(2 * 3 + k * 3 + i, l*3 + j) * dXdu1[k][i]);
+                                    entry_K.emplace_back(offsets1[k][3], offsets1[l][3], J0(2 * 3 + k*3 + i, 2 * 3 + l * 3 + j) * dXdu1[l][j] * dXdu1[k][i]);
                                     entry_cnt+=4;
                                 }
                         for (int i = 0; i < 3; i++)
                         {
                             for (int j = 0; j < 3; j++)
                             {
-                                entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], omega_dof[j], J0(k*3 + i, 4 * 3 + j)));
-                                entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets1[k][i], J0(4 * 3 + j, k*3 + i)));
+                                entry_K.emplace_back(offsets1[k][i], omega_dof[j], J0(k*3 + i, 4 * 3 + j));
+                                entry_K.emplace_back(omega_dof[j], offsets1[k][i], J0(4 * 3 + j, k*3 + i));
 
-                                entry_K.push_back(Eigen::Triplet<T>(offsets1[k][3], omega_dof[j], J0(2 *3 + k*3 + i, 4 * 3 + j) * dXdu1[k][i]));
-                                entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets1[k][3], J0(4 * 3 + j, 2 *3 + k*3 + i) * dXdu1[k][i]));
+                                entry_K.emplace_back(offsets1[k][3], omega_dof[j], J0(2 *3 + k*3 + i, 4 * 3 + j) * dXdu1[k][i]);
+                                entry_K.emplace_back(omega_dof[j], offsets1[k][3], J0(4 * 3 + j, 2 *3 + k*3 + i) * dXdu1[k][i]);
                                 entry_cnt+=4;
                             }
 
-                            entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], dof_theta1, J0(k*3 + i, 5 * 3)));
-                            entry_K.push_back(Eigen::Triplet<T>(dof_theta1, offsets1[k][i], J0(5 * 3, k*3 + i)));
+                            entry_K.emplace_back(offsets1[k][i], dof_theta1, J0(k*3 + i, 5 * 3));
+                            entry_K.emplace_back(dof_theta1, offsets1[k][i], J0(5 * 3, k*3 + i));
 
-                            entry_K.push_back(Eigen::Triplet<T>(offsets1[k][3], dof_theta1, J0(2 * 3 + k*3 + i, 5 * 3) * dXdu1[k][i]));
-                            entry_K.push_back(Eigen::Triplet<T>(dof_theta1, offsets1[k][3], J0(5 * 3, 2 * 3 + k*3 + i) * dXdu1[k][i]));
+                            entry_K.emplace_back(offsets1[k][3], dof_theta1, J0(2 * 3 + k*3 + i, 5 * 3) * dXdu1[k][i]);
+                            entry_K.emplace_back(dof_theta1, offsets1[k][3], J0(5 * 3, 2 * 3 + k*3 + i) * dXdu1[k][i]);
                             entry_cnt+=4;
                         }
 
                     }
                     for (int i = 0; i < 3; i++)
                     {
-                        entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], dof_theta1, J0(4 * 3 + i, 5 * 3)));
-                        entry_K.push_back(Eigen::Triplet<T>(dof_theta1, omega_dof[i], J0(5 * 3, 4 * 3 + i)));
+                        entry_K.emplace_back(omega_dof[i], dof_theta1, J0(4 * 3 + i, 5 * 3));
+                        entry_K.emplace_back(dof_theta1, omega_dof[i], J0(5 * 3, 4 * 3 + i));
                         entry_cnt+=2;
                         for (int j = 0; j < 3; j++)
                         {
-                            entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], omega_dof[j], J0(4 * 3 + i, 4 * 3 + j)));
+                            entry_K.emplace_back(omega_dof[i], omega_dof[j], J0(4 * 3 + i, 4 * 3 + j));
                             entry_cnt+=1;
                         }
                     }
-                    entry_K.push_back(Eigen::Triplet<T>(dof_theta1, dof_theta1, J0(5 * 3, 5 * 3)));
+                    entry_K.emplace_back(dof_theta1, dof_theta1, J0(5 * 3, 5 * 3));
                     entry_cnt+=1;
 
                     // std::cout << 16 * 16 << " " << entry_cnt << std::endl;
@@ -166,40 +166,40 @@ void EoLRodSim::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                             for (int i = 0; i < 3; i++)
                                 for (int j = 0; j < 3; j++)
                                 {
-                                    entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], offsets2[l][j], J1(k*3 + i, l * 3 + j)));
-                                    entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], offsets2[l][3], J1(k*3 + i, 2 * 3 + l * 3 + j) * dXdu2[l][j]));
-                                    entry_K.push_back(Eigen::Triplet<T>(offsets2[l][3], offsets2[k][i], J1(2 * 3 + l * 3 + j, k*3 + i) * dXdu2[l][j]));
-                                    entry_K.push_back(Eigen::Triplet<T>(offsets2[k][3], offsets2[l][3], J1(2 * 3 + k*3 + i, 2 * 3 + l * 3 + j) * dXdu2[l][j] * dXdu2[k][i]));
+                                    entry_K.emplace_back(offsets2[k][i], offsets2[l][j], J1(k*3 + i, l * 3 + j));
+                                    entry_K.emplace_back(offsets2[k][i], offsets2[l][3], J1(k*3 + i, 2 * 3 + l * 3 + j) * dXdu2[l][j]);
+                                    entry_K.emplace_back(offsets2[l][3], offsets2[k][i], J1(2 * 3 + l * 3 + j, k*3 + i) * dXdu2[l][j]);
+                                    entry_K.emplace_back(offsets2[k][3], offsets2[l][3], J1(2 * 3 + k*3 + i, 2 * 3 + l * 3 + j) * dXdu2[l][j] * dXdu2[k][i]);
                                 }
                         for (int i = 0; i < 3; i++)
                         {
                             for (int j = 0; j < 3; j++)
                             {
-                                entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], omega_dof[j], J1(k*3 + i, 4 * 3 + j)));
-                                entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets2[k][i], J1(4 * 3 + j, k*3 + i)));
-                                entry_K.push_back(Eigen::Triplet<T>(offsets2[k][3], omega_dof[j], J1(2 *3 + k*3 + i, 4 * 3 + j) * dXdu2[k][i]));
-                                entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets2[k][3], J1(4 * 3 + j, 2 *3 + k*3 + i) * dXdu2[k][i]));
+                                entry_K.emplace_back(offsets2[k][i], omega_dof[j], J1(k*3 + i, 4 * 3 + j));
+                                entry_K.emplace_back(omega_dof[j], offsets2[k][i], J1(4 * 3 + j, k*3 + i));
+                                entry_K.emplace_back(offsets2[k][3], omega_dof[j], J1(2 *3 + k*3 + i, 4 * 3 + j) * dXdu2[k][i]);
+                                entry_K.emplace_back(omega_dof[j], offsets2[k][3], J1(4 * 3 + j, 2 *3 + k*3 + i) * dXdu2[k][i]);
                             }
 
-                            entry_K.push_back(Eigen::Triplet<T>(dof_theta0, offsets2[k][i], J1(5 * 3, k*3 + i)));
-                            entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], dof_theta0, J1(k*3 + i, 5 * 3)));
+                            entry_K.emplace_back(dof_theta0, offsets2[k][i], J1(5 * 3, k*3 + i));
+                            entry_K.emplace_back(offsets2[k][i], dof_theta0, J1(k*3 + i, 5 * 3));
 
-                            entry_K.push_back(Eigen::Triplet<T>(offsets2[k][3], dof_theta0, J1(2 * 3 + k*3 + i, 5 * 3) * dXdu2[k][i]));
-                            entry_K.push_back(Eigen::Triplet<T>(dof_theta0, offsets2[k][3], J1(5 * 3, 2 * 3 + k*3 + i) * dXdu2[k][i]));
+                            entry_K.emplace_back(offsets2[k][3], dof_theta0, J1(2 * 3 + k*3 + i, 5 * 3) * dXdu2[k][i]);
+                            entry_K.emplace_back(dof_theta0, offsets2[k][3], J1(5 * 3, 2 * 3 + k*3 + i) * dXdu2[k][i]);
                         }
 
                     }
                     for (int i = 0; i < 3; i++)
                     {
-                        entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], dof_theta0, J1(4 * 3 + i, 5 * 3)));
-                        entry_K.push_back(Eigen::Triplet<T>(dof_theta0, omega_dof[i], J1(5 * 3, 4 * 3 + i)));
+                        entry_K.emplace_back(omega_dof[i], dof_theta0, J1(4 * 3 + i, 5 * 3));
+                        entry_K.emplace_back(dof_theta0, omega_dof[i], J1(5 * 3, 4 * 3 + i));
 
                         for (int j = 0; j < 3; j++)
                         {
-                            entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], omega_dof[j], J1(4 * 3 + i, 4 * 3 + j)));
+                            entry_K.emplace_back(omega_dof[i], omega_dof[j], J1(4 * 3 + i, 4 * 3 + j));
                         }
                     }
-                    entry_K.push_back(Eigen::Triplet<T>(dof_theta0, dof_theta0, J1(5 * 3, 5 * 3)));
+                    entry_K.emplace_back(dof_theta0, dof_theta0, J1(5 * 3, 5 * 3));
                 }
                 // std::cout << "here here" << std::endl;
                 // std::getchar();
@@ -227,31 +227,31 @@ void EoLRodSim::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                             for(int i = 0; i < 3; i++)
                                 for (int j = 0; j < 3; j++)
                                     {
-                                        entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], offsets[l][j], -J(k*3 + i, l * 3 + j)));
+                                        entry_K.emplace_back(offsets[k][i], offsets[l][j], -J(k*3 + i, l * 3 + j));
 
-                                        entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], offsets[l][3], -J(k*3 + i, 3 * 3 + l * 3 + j) * dXdu[l][j]));
+                                        entry_K.emplace_back(offsets[k][i], offsets[l][3], -J(k*3 + i, 3 * 3 + l * 3 + j) * dXdu[l][j]);
                                         
-                                        entry_K.push_back(Eigen::Triplet<T>(offsets[k][3], offsets[l][j], -J(3 * 3 + k * 3 + i, l * 3 + j) * dXdu[k][i]));
+                                        entry_K.emplace_back(offsets[k][3], offsets[l][j], -J(3 * 3 + k * 3 + i, l * 3 + j) * dXdu[k][i]);
 
                                         
-                                        entry_K.push_back(Eigen::Triplet<T>(offsets[k][3], 
+                                        entry_K.emplace_back(offsets[k][3], 
                                                                             offsets[l][3], 
-                                                                            -J(3 * 3 + k*3 + i, 3 * 3 + l * 3 + j) * dXdu[l][j] * dXdu[k][i]));
+                                                                            -J(3 * 3 + k*3 + i, 3 * 3 + l * 3 + j) * dXdu[l][j] * dXdu[k][i]);
 
                                     }
                     for(int k = 0; k < nodes.size(); k++)
                         for (int j = 0; j < 2; j++)
                             for(int i = 0; i < 3; i++)
                             {
-                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], theta_dofs[j], -J(k*3 + i, 18 + j)));
-                                entry_K.push_back(Eigen::Triplet<T>(theta_dofs[j], offsets[k][i], -J(18 + j, k * 3 + i)));
+                                entry_K.emplace_back(offsets[k][i], theta_dofs[j], -J(k*3 + i, 18 + j));
+                                entry_K.emplace_back(theta_dofs[j], offsets[k][i], -J(18 + j, k * 3 + i));
 
-                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][3], theta_dofs[j], -J(3 * 3 + k * 3 + i, 18 + j) * dXdu[k][i]));
-                                entry_K.push_back(Eigen::Triplet<T>(theta_dofs[j], offsets[k][3], -J(18 + j, 3 * 3 + k * 3 + i) * dXdu[k][i]));
+                                entry_K.emplace_back(offsets[k][3], theta_dofs[j], -J(3 * 3 + k * 3 + i, 18 + j) * dXdu[k][i]);
+                                entry_K.emplace_back(theta_dofs[j], offsets[k][3], -J(18 + j, 3 * 3 + k * 3 + i) * dXdu[k][i]);
                             }
                     for (int i = 0; i < 2; i++)
                         for (int j = 0; j < 2; j++)
-                            entry_K.push_back(Eigen::Triplet<T>(theta_dofs[i], theta_dofs[j], -J(18 + i, 18 + j)));
+                            entry_K.emplace_back(theta_dofs[i], theta_dofs[j], -J(18 + i, 18 + j));
                 }
                 
             }

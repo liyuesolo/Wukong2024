@@ -35,14 +35,14 @@ void EoLRodSim::addParallelContactK(std::vector<Entry>& entry_K)
             {
                 if (u_right - u < min_du && offset_right[3] != offset[3])
                 {
-                    entry_K.push_back(Entry(offset[3], offset[3], k_yc));
-                    entry_K.push_back(Entry(offset_right[3], offset_right[3], k_yc));
+                    entry_K.emplace_back(offset[3], offset[3], k_yc);
+                    entry_K.emplace_back(offset_right[3], offset_right[3], k_yc);
                     
                 }
                 if (u - u_left < min_du && offset_left[3] != offset[3])
                 {
-                    entry_K.push_back(Entry(offset[3], offset[3], k_yc));
-                    entry_K.push_back(Entry(offset_left[3], offset_left[3], k_yc));   
+                    entry_K.emplace_back(offset[3], offset[3], k_yc);
+                    entry_K.emplace_back(offset_left[3], offset_left[3], k_yc);   
                 }
             }
 
@@ -52,11 +52,11 @@ void EoLRodSim::addParallelContactK(std::vector<Entry>& entry_K)
             // 0 is the positive side sliding range
             if(delta_u >= range[0])
             {
-                entry_K.push_back(Entry(offset[3], offset[3], k_yc));
+                entry_K.emplace_back(offset[3], offset[3], k_yc);
             }
             else if (delta_u <= -range[1])
             {
-                entry_K.push_back(Entry(offset[3], offset[3], k_yc));
+                entry_K.emplace_back(offset[3], offset[3], k_yc);
             }
             cnt++;
         }

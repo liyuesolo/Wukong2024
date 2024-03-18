@@ -32,27 +32,27 @@ void EoLRodSim::addStretchingK(std::vector<Entry>& entry_K)
                     for(int i = 0; i < 3; i++)
                         for (int j = 0; j < 3; j++)
                             {
-                                // entry_K.push_back(Entry(offsets[k][i], offsets[l][j], -J[k*3 + i][l * 3 + j]));
+                                // entry_K.emplace_back(offsets[k][i], offsets[l][j], -J[k*3 + i][l * 3 + j]));
                                 
-                                // entry_K.push_back(Entry(offsets[k][i], offsets[l][3], -J[k*3 + i][2 * 3 + l * 3 + j] * dXdu[l][j]));
+                                // entry_K.emplace_back(offsets[k][i], offsets[l][3], -J[k*3 + i][2 * 3 + l * 3 + j] * dXdu[l][j]));
 
-                                // entry_K.push_back(Entry(offsets[k][3], offsets[l][j] , -J[2 * 3 + k * 3 + i][l * 3 + j] * dXdu[k][i]));
+                                // entry_K.emplace_back(offsets[k][3], offsets[l][j] , -J[2 * 3 + k * 3 + i][l * 3 + j] * dXdu[k][i]));
 
                                 // // dX/du ^T d2e/dX2 dXdu                    
-                                // entry_K.push_back(Entry(offsets[k][3], 
+                                // entry_K.emplace_back(offsets[k][3], 
                                 //                         offsets[l][3], 
                                 //                         -J[2 * 3 + k*3 + i][2 * 3 + l * 3 + j] * dXdu[l][j] * dXdu[k][i]));
 
-                                entry_K.push_back(Entry(offsets[k][i], offsets[l][j], -J(k*3 + i, l * 3 + j)));
+                                entry_K.emplace_back(offsets[k][i], offsets[l][j], -J(k*3 + i, l * 3 + j));
                                 
-                                entry_K.push_back(Entry(offsets[k][i], offsets[l][3], -J(k*3 + i, 2 * 3 + l * 3 + j) * dXdu[l][j]));
+                                entry_K.emplace_back(offsets[k][i], offsets[l][3], -J(k*3 + i, 2 * 3 + l * 3 + j) * dXdu[l][j]);
 
-                                entry_K.push_back(Entry(offsets[k][3], offsets[l][j] , -J(2 * 3 + k * 3 + i, l * 3 + j) * dXdu[k][i]));
+                                entry_K.emplace_back(offsets[k][3], offsets[l][j] , -J(2 * 3 + k * 3 + i, l * 3 + j) * dXdu[k][i]);
 
                                 // dX/du ^T d2e/dX2 dXdu                    
-                                entry_K.push_back(Entry(offsets[k][3], 
+                                entry_K.emplace_back(offsets[k][3], 
                                                         offsets[l][3], 
-                                                        -J(2 * 3 + k*3 + i, 2 * 3 + l * 3 + j) * dXdu[l][j] * dXdu[k][i]));
+                                                        -J(2 * 3 + k*3 + i, 2 * 3 + l * 3 + j) * dXdu[l][j] * dXdu[k][i]);
                             }
         });   
     }

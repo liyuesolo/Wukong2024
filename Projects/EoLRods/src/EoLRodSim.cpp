@@ -333,8 +333,9 @@ T EoLRodSim::computeResidual(Eigen::Ref<VectorXT> residual)
 }
 
 
-void EoLRodSim::addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K)
+void EoLRodSim::buildSystemDoFMatrix(StiffnessMatrix& K)
 {
+    std::vector<Entry> entry_K;
     VectorXT dq_projected = dq;
     if(!add_penalty && !run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
@@ -367,13 +368,7 @@ void EoLRodSim::addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K)
         addRegularizingK(entry_K);
     if (add_contact_penalty)
         addParallelContactK(entry_K);
-}
 
-
-void EoLRodSim::buildSystemDoFMatrix(StiffnessMatrix& K)
-{
-    std::vector<Entry> entry_K;
-    addStiffnessMatrix(entry_K);
     StiffnessMatrix A(deformed_states.rows(), deformed_states.rows());
 
     A.setFromTriplets(entry_K.begin(), entry_K.end());
