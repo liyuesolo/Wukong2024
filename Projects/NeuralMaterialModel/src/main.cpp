@@ -12,13 +12,11 @@ int main()
 
     DiscreteShellMacro<NeuralMaterialModel> discrete_shell(neural_model);
     discrete_shell.initializeFromFile(base_folder + "/DiscreteShell/data/grid.obj");
-    // discrete_shell.hinge_stiffness *= 1000.0;
     for (int j = 80; j < 100; j++)
     {
         for (int d = 0; d < 3; d++)
         {
             discrete_shell.dirichlet_data[j * 3 + d] = 0;
-            // discrete_shell.dirichlet_data[99 * 3 + d] = 0;
         }
     }
     

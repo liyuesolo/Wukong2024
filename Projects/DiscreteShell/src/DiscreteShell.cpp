@@ -437,7 +437,7 @@ void DiscreteShell::addShellEnergy(T& energy)
     energy += bending_energy;
 }
 
-void DiscreteShell::addShellInplaneForceEntry(VectorXT& residual)
+void DiscreteShell::addShellInplaneForceEntries(VectorXT& residual)
 {
     iterateFaceSerial([&](int face_idx)
     {
@@ -455,7 +455,7 @@ void DiscreteShell::addShellInplaneForceEntry(VectorXT& residual)
     });
 }
 
-void DiscreteShell::addShellBendingForceEntry(VectorXT& residual)
+void DiscreteShell::addShellBendingForceEntries(VectorXT& residual)
 {
     iterateHingeSerial([&](const HingeIdx& hinge_idx, int hinge_cnt){
                 
@@ -477,8 +477,8 @@ void DiscreteShell::addShellBendingForceEntry(VectorXT& residual)
 }
 void DiscreteShell::addShellForceEntry(VectorXT& residual)
 {
-    addShellInplaneForceEntry(residual);
-    addShellBendingForceEntry(residual);
+    addShellInplaneForceEntries(residual);
+    addShellBendingForceEntries(residual);
 }
 
 void DiscreteShell::addShellInplaneHessianEntries(std::vector<Entry>& entries)

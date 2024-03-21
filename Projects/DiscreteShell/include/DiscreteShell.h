@@ -334,12 +334,12 @@ public:
 
     
     // stretching and bending energy
-    void addShellInplaneEnergy(T& energy);
-    void addShellBendingEnergy(T& energy);
-    void addShellInplaneForceEntry(VectorXT& residual);
-    void addShellBendingForceEntry(VectorXT& residual);
-    void addShellInplaneHessianEntries(std::vector<Entry>& entries);
-    void addShellBendingHessianEntries(std::vector<Entry>& entries);
+    virtual void addShellInplaneEnergy(T& energy);
+    virtual void addShellBendingEnergy(T& energy);
+    virtual void addShellInplaneForceEntries(VectorXT& residual);
+    virtual void addShellBendingForceEntries(VectorXT& residual);
+    virtual void addShellInplaneHessianEntries(std::vector<Entry>& entries);
+    virtual void addShellBendingHessianEntries(std::vector<Entry>& entries);
 
     // graviational energy
     void addShellGravitionEnergy(T& energy);
