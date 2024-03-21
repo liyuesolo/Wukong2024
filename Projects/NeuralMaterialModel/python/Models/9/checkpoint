@@ -1,2 +1,0 @@
-model_checkpoint_path: "homo_NH.tf"
-all_model_checkpoint_paths: "homo_NH.tf"
