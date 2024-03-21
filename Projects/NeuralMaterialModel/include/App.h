@@ -31,7 +31,7 @@ public:
         polyscope::view::windowWidth = 1024;
         polyscope::view::windowHeight = 1024;
         polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::ShadowOnly;
-        polyscope::options::groundPlaneHeightFactor = 0.; 
+        polyscope::options::groundPlaneHeightFactor = 0.6; 
         polyscope::options::shadowDarkness = 0.4;
 
         // Initialize polyscope
@@ -77,6 +77,10 @@ public:
             vectorToIGLMatrix<T, 3>(simulation.deformed, meshV);
             vectorToIGLMatrix<int, 3>(simulation.faces, meshF);
             polyscope::registerSurfaceMesh("surface mesh", meshV, meshF);
+        }
+        if (ImGui::Checkbox("Gravity", &simulation.add_gravity)) 
+        {
+            
         }
         if (animate_modes && !run_sim)
         {

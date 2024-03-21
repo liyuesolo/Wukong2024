@@ -52,6 +52,11 @@ public:
         {
             run_sim = true;
         }
+        if (ImGui::Button("stop")) 
+        {
+            animate_modes = false;
+            run_sim = false;
+        }
         if (ImGui::Button("Animate Modes")) 
         {
             animate_modes = true;
@@ -59,11 +64,6 @@ public:
         if (ImGui::Button("Next Modes")) 
         {
             modes = (modes + 1) % eigen_values.rows();
-        }
-        if (ImGui::Button("stop")) 
-        {
-            animate_modes = false;
-            run_sim = false;
         }
         if (ImGui::Button("Compute Linear Modes")) 
         {
@@ -77,6 +77,10 @@ public:
             vectorToIGLMatrix<T, 3>(simulation.deformed, meshV);
             vectorToIGLMatrix<int, 3>(simulation.faces, meshF);
             polyscope::registerSurfaceMesh("surface mesh", meshV, meshF);
+        }
+        if (ImGui::Checkbox("Gravity", &simulation.add_gravity)) 
+        {
+            
         }
         if (animate_modes && !run_sim)
         {

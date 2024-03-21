@@ -129,6 +129,8 @@ T DiscreteShell::computeTotalEnergy()
 
     T energy = 0.0;
     addShellEnergy(energy);
+    if (add_gravity)
+        addShellGravitionEnergy(energy);
     return energy;
 }
 
@@ -136,6 +138,8 @@ T DiscreteShell::computeResidual(VectorXT& residual)
 {
     deformed = undeformed + u;
     addShellForceEntry(residual);
+    if (add_gravity)
+        addShellGravitionForceEntry(residual);
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
         {
@@ -184,6 +188,8 @@ void DiscreteShell::buildSystemMatrix(StiffnessMatrix& K)
     deformed = undeformed + u;
     std::vector<Entry> entries;
     addShellHessianEntries(entries);
+    if (add_gravity)
+        addShellGravitionHessianEntry(entries);
     
     int n_dof = deformed.rows();
     K.resize(n_dof, n_dof);
@@ -249,13 +255,39 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
 {
     MatrixXT V; MatrixXi F;
     igl::readOBJ(filename, V, F);
+
+    auto rotationMatrixFromEulerAngle = [](T angle_z, T angle_y, T angle_x)
+    {
+        Eigen::Matrix3d R, yaw, pitch, roll;
+        yaw.setZero(); pitch.setZero(); roll.setZero();
+        yaw(0, 0) = cos(angle_z);	yaw(0, 1) = -sin(angle_z);
+        yaw(1, 0) = sin(angle_z);	yaw(1, 1) = cos(angle_z);
+        yaw(2, 2) = 1.0;
+        //y rotation
+        pitch(0, 0) = cos(angle_y); pitch(0, 2) = sin(angle_y);
+        pitch(1, 1) = 1.0;
+        pitch(2, 0) = -sin(angle_y); pitch(2, 2) = cos(angle_y);
+        //x rotation
+        roll(0, 0) = 1.0;
+        roll(1, 1) = cos(angle_x); roll(1, 2) = -sin(angle_x);
+        roll(2, 1) = sin(angle_x); roll(2, 2) = cos(angle_x);
+        R = yaw * pitch * roll;
+        return R;
+    };
+
+    TM R = rotationMatrixFromEulerAngle(0, 0, M_PI_2);
+    for (int i = 0; i < V.rows(); i++)
+    {
+        V.row(i) = (R * V.row(i).transpose()).transpose();
+    }
+    
+
     iglMatrixFatten<T, 3>(V, undeformed);
     iglMatrixFatten<int, 3>(F, faces);
     deformed = undeformed;
     u = VectorXT::Zero(deformed.rows());
-    computeRestShape();
     buildHingeStructure();
-    updateLameParameters();
+    
 }
 
 
@@ -355,44 +387,6 @@ void DiscreteShell::buildHingeStructure()
     hinge_stiffness.setOnes();
 }
 
-void DiscreteShell::computeRestShape()
-{
-    Xinv.resize(nFaces());
-    shell_rest_area = VectorXT::Ones(nFaces());
-    thickness = VectorXT::Ones(nFaces()) * 0.003;
-    
-    iterateFaceSerial([&](int i){
-        TV E[2]; // edges
-        FaceVtx vertices = getFaceVtxUndeformed(i);
-        E[0] = vertices.row(1) - vertices.row(0);
-        E[1] = vertices.row(2) - vertices.row(0);
-        
-        TV N = E[0].cross(E[1]);
-        T m_A0 = N.norm()*0.5;
-        shell_rest_area[i] = m_A0;
-        
-        // // compute rest
-        TV B2D[2];
-        B2D[0] = E[0].normalized();
-        TV n = B2D[0].cross(E[1]);
-        B2D[1] = E[0].cross(n);
-        B2D[1] = B2D[1].normalized();
-        
-        
-        Eigen::Matrix2d MatE2D(2, 2);
-        MatE2D(0, 0) = E[0].dot(B2D[0]);
-        MatE2D(1, 0) = E[0].dot(B2D[1]);
-        MatE2D(0, 1) = E[1].dot(B2D[0]);
-        MatE2D(1, 1) = E[1].dot(B2D[1]);
-
-        Eigen::Matrix2d Einv = MatE2D.inverse();
-        Xinv[i] = Einv;
-        // std::cout << Einv << std::endl;
-        // std::cout << N.transpose() << std::endl;
-        // std::getchar();
-    });
-}
-
 void DiscreteShell::addShellInplaneEnergy(T& energy)
 {
     iterateFaceSerial([&](int face_idx)
@@ -402,27 +396,12 @@ void DiscreteShell::addShellInplaneEnergy(T& energy)
 
         FaceIdx indices = faces.segment<3>(face_idx * 3);
         
-
-        T m_Einv[2][2];
-        m_Einv[0][0] = Xinv[face_idx](0, 0);
-        m_Einv[0][1] = Xinv[face_idx](0, 1);
-        m_Einv[1][0] = Xinv[face_idx](1, 0);
-        m_Einv[1][1] = Xinv[face_idx](1, 1);
-
-        T m_A0 = shell_rest_area[face_idx];
-        T m_h = thickness[face_idx];
-
-        std::array<TV, 3> x;
-        x[0] = vertices.row(0);
-        x[1] = vertices.row(1);
-        x[2] = vertices.row(2);
-        
         TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
         TV X0 = undeformed_vertices.row(0); 
         TV X1 = undeformed_vertices.row(1); 
         TV X2 = undeformed_vertices.row(2);
 
-        T k_s = E * m_h / (1.0 - nu * nu);
+        T k_s = E * thickness / (1.0 - nu * nu);
 
         energy += compute3DCSTShellEnergy(nu, k_s, x0, x1, x2, X0, X1, X2);
 
@@ -436,18 +415,8 @@ void DiscreteShell::addShellBendingEnergy(T& energy)
         HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
         HingeVtx undeformed_vertices = getHingeVtxUndeformed(hinge_idx);
 
-        std::array<TV, 4> x, X;
-        x[0] = deformed_vertices.row(0);
-        x[1] = deformed_vertices.row(1);
-        x[2] = deformed_vertices.row(2);
-        x[3] = deformed_vertices.row(3);
 
-        X[0] = undeformed_vertices.row(0);
-        X[1] = undeformed_vertices.row(1);
-        X[2] = undeformed_vertices.row(2);
-        X[3] = undeformed_vertices.row(3);
-
-        T k_bend = hinge_stiffness[hinge_cnt] * E * std::pow(thickness[0], 3) / (24 * (1.0 - std::pow(nu, 2)));
+        T k_bend = hinge_stiffness[hinge_cnt] * E * std::pow(thickness, 3) / (24 * (1.0 - std::pow(nu, 2)));
 
         TV x0 = deformed_vertices.row(0); TV x1 = deformed_vertices.row(1); TV x2 = deformed_vertices.row(2); TV x3 = deformed_vertices.row(3);
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2); TV X3 = undeformed_vertices.row(3);
@@ -475,41 +444,14 @@ void DiscreteShell::addShellInplaneForceEntry(VectorXT& residual)
         FaceVtx vertices = getFaceVtxDeformed(face_idx);
         FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
         FaceIdx indices = faces.segment<3>(face_idx * 3);
-        T m_Einv[2][2];
-        m_Einv[0][0] = Xinv[face_idx](0, 0);
-        m_Einv[0][1] = Xinv[face_idx](0, 1);
-        m_Einv[1][0] = Xinv[face_idx](1, 0);
-        m_Einv[1][1] = Xinv[face_idx](1, 1);
 
-        T m_A0 = shell_rest_area[face_idx];
-        T m_h = thickness[face_idx];
-
-        std::array<TV, 3> x, X;
-        x[0] = vertices.row(0);
-        x[1] = vertices.row(1);
-        x[2] = vertices.row(2);
-
-        X[0] = undeformed_vertices.row(0);
-        X[1] = undeformed_vertices.row(1);
-        X[2] = undeformed_vertices.row(2);
-        
-
-        T k_s = E * m_h / (1.0 - nu * nu);
+        T k_s = E * thickness / (1.0 - nu * nu);
         TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
         
         Vector<T, 9> dedx;
         compute3DCSTShellEnergyGradient(nu, k_s, x0, x1, x2, X0, X1, X2, dedx);
-        
-        dedx *= -1.0;
-        
-        for (int i = 0; i < 3; i++)
-        {
-            for (int d = 0; d < 3; d++)
-            {
-                residual[indices[i] * 3 + d] += dedx[i * 3 + d];
-            }   
-        }
+        addForceEntry<3>(residual, {indices[0], indices[1], indices[2]}, -dedx);
     });
 }
 
@@ -520,36 +462,17 @@ void DiscreteShell::addShellBendingForceEntry(VectorXT& residual)
         HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
         HingeVtx undeformed_vertices = getHingeVtxUndeformed(hinge_idx);
 
-        std::array<TV, 4> x, X;
-        x[0] = deformed_vertices.row(0);
-        x[1] = deformed_vertices.row(1);
-        x[2] = deformed_vertices.row(2);
-        x[3] = deformed_vertices.row(3);
 
-        X[0] = undeformed_vertices.row(0);
-        X[1] = undeformed_vertices.row(1);
-        X[2] = undeformed_vertices.row(2);
-        X[3] = undeformed_vertices.row(3);
+        T k_bend = hinge_stiffness[hinge_cnt] * E * std::pow(thickness, 3) / (24 * (1.0 - std::pow(nu, 2)));
 
-        T k_bend = hinge_stiffness[hinge_cnt] * E * std::pow(thickness[0], 3) / (24 * (1.0 - std::pow(nu, 2)));
-
-        Vector<T, 12> fx;
-
-        // #include "autodiff/DSBending_fx.mcg"
+        Vector<T, 12> dedx;
         
         TV x0 = deformed_vertices.row(0); TV x1 = deformed_vertices.row(1); TV x2 = deformed_vertices.row(2); TV x3 = deformed_vertices.row(3);
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2); TV X3 = undeformed_vertices.row(3);
 
-        computeDSBendingEnergyGradient(k_bend, x0, x1, x2, x3, X0, X1, X2, X3, fx);
-        fx *= -1;
-
-        for (int i = 0; i < 4; i++)
-        {
-            for (int d = 0; d < 3; d++)
-            {
-                residual[hinge_idx[i] * 3 + d] += fx[i * 3 + d];
-            }
-        }
+        computeDSBendingEnergyGradient(k_bend, x0, x1, x2, x3, X0, X1, X2, X3, dedx);
+        addForceEntry<3>(residual, 
+            {hinge_idx[0], hinge_idx[1], hinge_idx[2], hinge_idx[3]}, -dedx);
     });
 }
 void DiscreteShell::addShellForceEntry(VectorXT& residual)
@@ -566,47 +489,17 @@ void DiscreteShell::addShellInplaneHessianEntries(std::vector<Entry>& entries)
         FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
 
         FaceIdx indices = faces.segment<3>(face_idx * 3);
-        T m_Einv[2][2];
-        m_Einv[0][0] = Xinv[face_idx](0, 0);
-        m_Einv[0][1] = Xinv[face_idx](0, 1);
-        m_Einv[1][0] = Xinv[face_idx](1, 0);
-        m_Einv[1][1] = Xinv[face_idx](1, 1);
 
-        T m_A0 = shell_rest_area[face_idx];
-        T m_h = thickness[face_idx];
-
-        std::array<TV, 3> x, X;
-        x[0] = vertices.row(0);
-        x[1] = vertices.row(1);
-        x[2] = vertices.row(2);
-
-        X[0] = undeformed_vertices.row(0);
-        X[1] = undeformed_vertices.row(1);
-        X[2] = undeformed_vertices.row(2);
-
-        T k_s = E * m_h / (1.0 - nu * nu);
+        T k_s = E * thickness / (1.0 - nu * nu);
 
         TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
 
         Matrix<T, 9, 9> hess;
         compute3DCSTShellEnergyHessian(nu, k_s, x0, x1, x2, X0, X1, X2, hess);
-        // makePD<T, 9>(hess);
+        addHessianEntry<3, 3>(entries, {indices[0], indices[1], indices[2]}, hess);
+
         
-        for (int i = 0; i < 3; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                for (int d = 0; d < 3; d++)
-                {
-                    for (int dd = 0; dd < 3; dd++)
-                    {
-                        entries.push_back(Entry(indices[i] * 3 + d, 
-                            indices[j] * 3 + dd, hess(i * 3 + d, j * 3 + dd)));
-                    }   
-                } 
-            }
-        }
     });
 }
 
@@ -617,41 +510,16 @@ void DiscreteShell::addShellBendingHessianEntries(std::vector<Entry>& entries)
         HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
         HingeVtx undeformed_vertices = getHingeVtxUndeformed(hinge_idx);
 
-        std::array<TV, 4> x, X;
-        x[0] = deformed_vertices.row(0);
-        x[1] = deformed_vertices.row(1);
-        x[2] = deformed_vertices.row(2);
-        x[3] = deformed_vertices.row(3);
-
-        X[0] = undeformed_vertices.row(0);
-        X[1] = undeformed_vertices.row(1);
-        X[2] = undeformed_vertices.row(2);
-        X[3] = undeformed_vertices.row(3);
-
-        T k_bend = hinge_stiffness[hinge_cnt] * E * std::pow(thickness[0], 3) / (24 * (1.0 - std::pow(nu, 2)));
+        T k_bend = hinge_stiffness[hinge_cnt] * E * std::pow(thickness, 3) / (24 * (1.0 - std::pow(nu, 2)));
         
         Matrix<T, 12, 12> hess;
         TV x0 = deformed_vertices.row(0); TV x1 = deformed_vertices.row(1); TV x2 = deformed_vertices.row(2); TV x3 = deformed_vertices.row(3);
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2); TV X3 = undeformed_vertices.row(3);
 
         computeDSBendingEnergyHessian(k_bend, x0, x1, x2, x3, X0, X1, X2, X3, hess);
-        
-
-        for (int i = 0; i < 4; i++)
-        {
-            for (int j = 0; j < 4; j++)
-            {
-                for (int d = 0; d < 3; d++)
-                {
-                    for (int dd = 0; dd < 3; dd++)
-                    {
-                        entries.push_back(Entry(hinge_idx[i] * 3 + d, 
-                            hinge_idx[j] * 3 + dd , hess(i * 3 + d, j * 3 + dd)));
-                    }   
-                } 
-            }
-        }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+        addHessianEntry<3, 3>(entries, 
+                            {hinge_idx[0], hinge_idx[1], hinge_idx[2], hinge_idx[3]}, 
+                            hess);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
 
     });
 }
@@ -697,4 +565,65 @@ void DiscreteShell::computeBoundingBox(TV& min_corner, TV& max_corner)
             min_corner[d] = std::min(min_corner[d], undeformed[i * 3 + d]);
         }
     }
+}
+
+void DiscreteShell::addShellGravitionEnergy(T& energy)
+{
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceVtx vertices = getFaceVtxDeformed(face_idx);
+        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+
+        FaceIdx indices = faces.segment<3>(face_idx * 3);
+
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+        TV X0 = undeformed_vertices.row(0); 
+        TV X1 = undeformed_vertices.row(1); 
+        TV X2 = undeformed_vertices.row(2);
+
+        energy += compute3DCSTGravitationalEnergy(density, thickness, 
+            gravity, x0, x1, x2, X0, X1, X2);
+    });
+}
+
+void DiscreteShell::addShellGravitionForceEntry(VectorXT& residual)
+{
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceVtx vertices = getFaceVtxDeformed(face_idx);
+        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+
+        FaceIdx indices = faces.segment<3>(face_idx * 3);
+
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+        TV X0 = undeformed_vertices.row(0); 
+        TV X1 = undeformed_vertices.row(1); 
+        TV X2 = undeformed_vertices.row(2);
+
+        Vector<T, 9> dedx;
+        compute3DCSTGravitationalEnergyGradient(density, thickness, gravity, x0, x1, x2, X0, X1, X2, dedx);
+        addForceEntry<3>(residual, {indices[0], indices[1], indices[2]}, -dedx);
+    });
+}
+
+void DiscreteShell::addShellGravitionHessianEntry(std::vector<Entry>& entries)
+{
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceVtx vertices = getFaceVtxDeformed(face_idx);
+        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+
+        FaceIdx indices = faces.segment<3>(face_idx * 3);
+
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+        TV X0 = undeformed_vertices.row(0); 
+        TV X1 = undeformed_vertices.row(1); 
+        TV X2 = undeformed_vertices.row(2);
+
+        
+        Matrix<T, 9, 9> hessian;
+        compute3DCSTGravitationalEnergyHessian(density, thickness, gravity, x0, x1, x2, X0, X1, X2, hessian);
+        addHessianEntry<3, 3>(entries, {indices[0], indices[1], indices[2]}, hessian);
+            
+    });
 }

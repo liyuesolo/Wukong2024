@@ -46,7 +46,10 @@ public:
     using HingeVtx = Matrix<T, 4, 3>;
 
 public:
-    T E = 1e3;
+    // material parameter setup
+    T density = 7.85e4; 
+    TV gravity = TV(0.0, -9.8, 0.0);    
+    T E = 1e6;
     T nu = 0.48;
 
     T lambda, mu;
@@ -54,7 +57,7 @@ public:
     Hinges hinges;
     std::vector<TM2> Xinv;
     VectorXT shell_rest_area;
-    VectorXT thickness;
+    T thickness = 0.003; // meter
     VectorXi faces;
     std::vector<Triangle> triangles;
     VectorXT rest_area;
@@ -68,6 +71,7 @@ public:
     bool run_diff_test = false;
     int max_newton_iter = 500;
     bool use_Newton = true;
+    bool add_gravity = false;
     bool jump_out = true;
     bool verbose = true;
     T newton_tol = 1e-6;
@@ -322,25 +326,35 @@ public:
     void computeLinearModes(MatrixXT& eigen_vectors, VectorXT& eigen_values);
     void initializeFromFile(const std::string& filename);
     void buildHingeStructure();
-    void computeRestShape();
     int nFaces () { return faces.rows() / 3; }
-    void updateRestshape() { computeRestShape(); }
+    
     void addShellEnergy(T& energy);
+    void addShellForceEntry(VectorXT& residual);
+    void addShellHessianEntries(std::vector<Entry>& entries);
+
+    
+    // stretching and bending energy
     void addShellInplaneEnergy(T& energy);
     void addShellBendingEnergy(T& energy);
-    void addShellForceEntry(VectorXT& residual);
     void addShellInplaneForceEntry(VectorXT& residual);
     void addShellBendingForceEntry(VectorXT& residual);
-    void addShellHessianEntries(std::vector<Entry>& entries);
     void addShellInplaneHessianEntries(std::vector<Entry>& entries);
     void addShellBendingHessianEntries(std::vector<Entry>& entries);
+
+    // graviational energy
+    void addShellGravitionEnergy(T& energy);
+    void addShellGravitionForceEntry(VectorXT& residual);
+    void addShellGravitionHessianEntry(std::vector<Entry>& entries);
 
     void computeBoundingBox(TV& min_corner, TV& max_corner);
 
     void setHingeStiffness();
 
 public:
-    DiscreteShell() {}
+    DiscreteShell() 
+    {
+        updateLameParameters();
+    }
     ~DiscreteShell() {}
 };
 
