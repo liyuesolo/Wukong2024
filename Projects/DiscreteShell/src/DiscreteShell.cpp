@@ -393,7 +393,7 @@ void DiscreteShell::computeRestShape()
     });
 }
 
-void DiscreteShell::addShellEnergy(T& energy)
+void DiscreteShell::addShellInplaneEnergy(T& energy)
 {
     iterateFaceSerial([&](int face_idx)
     {
@@ -427,7 +427,10 @@ void DiscreteShell::addShellEnergy(T& energy)
         energy += compute3DCSTShellEnergy(nu, k_s, x0, x1, x2, X0, X1, X2);
 
     });
+}
 
+void DiscreteShell::addShellBendingEnergy(T& energy)
+{
     iterateHingeSerial([&](const HingeIdx& hinge_idx, int hinge_cnt){
         
         HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
@@ -454,7 +457,18 @@ void DiscreteShell::addShellEnergy(T& energy)
     });
 }
 
-void DiscreteShell::addShellForceEntry(VectorXT& residual)
+void DiscreteShell::addShellEnergy(T& energy)
+{
+    T in_plane_energy = 0.0;
+    T bending_energy = 0.0;
+    addShellInplaneEnergy(in_plane_energy);
+    addShellBendingEnergy(bending_energy);    
+
+    energy += in_plane_energy;
+    energy += bending_energy;
+}
+
+void DiscreteShell::addShellInplaneForceEntry(VectorXT& residual)
 {
     iterateFaceSerial([&](int face_idx)
     {
@@ -497,8 +511,10 @@ void DiscreteShell::addShellForceEntry(VectorXT& residual)
             }   
         }
     });
+}
 
-    
+void DiscreteShell::addShellBendingForceEntry(VectorXT& residual)
+{
     iterateHingeSerial([&](const HingeIdx& hinge_idx, int hinge_cnt){
                 
         HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
@@ -536,7 +552,13 @@ void DiscreteShell::addShellForceEntry(VectorXT& residual)
         }
     });
 }
-void DiscreteShell::addShellHessianEntries(std::vector<Entry>& entries)
+void DiscreteShell::addShellForceEntry(VectorXT& residual)
+{
+    addShellInplaneForceEntry(residual);
+    addShellBendingForceEntry(residual);
+}
+
+void DiscreteShell::addShellInplaneHessianEntries(std::vector<Entry>& entries)
 {
     iterateFaceSerial([&](int face_idx)
     {
@@ -586,7 +608,10 @@ void DiscreteShell::addShellHessianEntries(std::vector<Entry>& entries)
             }
         }
     });
-    
+}
+
+void DiscreteShell::addShellBendingHessianEntries(std::vector<Entry>& entries)
+{
     iterateHingeSerial([&](const HingeIdx& hinge_idx, int hinge_cnt){
         
         HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
@@ -629,6 +654,12 @@ void DiscreteShell::addShellHessianEntries(std::vector<Entry>& entries)
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 
     });
+}
+
+void DiscreteShell::addShellHessianEntries(std::vector<Entry>& entries)
+{
+    addShellInplaneHessianEntries(entries);
+    addShellBendingHessianEntries(entries);
 }
 
 void DiscreteShell::setHingeStiffness()

@@ -326,8 +326,14 @@ public:
     int nFaces () { return faces.rows() / 3; }
     void updateRestshape() { computeRestShape(); }
     void addShellEnergy(T& energy);
+    void addShellInplaneEnergy(T& energy);
+    void addShellBendingEnergy(T& energy);
     void addShellForceEntry(VectorXT& residual);
+    void addShellInplaneForceEntry(VectorXT& residual);
+    void addShellBendingForceEntry(VectorXT& residual);
     void addShellHessianEntries(std::vector<Entry>& entries);
+    void addShellInplaneHessianEntries(std::vector<Entry>& entries);
+    void addShellBendingHessianEntries(std::vector<Entry>& entries);
 
     void computeBoundingBox(TV& min_corner, TV& max_corner);
 

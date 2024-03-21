@@ -8,7 +8,7 @@ class DiscreteShellHomogenization : public DiscreteShell
 public:
     
 public:
-    void imposeUniaxialBending(T angle, T curvature) {}
+    void imposeUniaxialBending(T angle, T curvature);
 
     DiscreteShellHomogenization() {}
     ~DiscreteShellHomogenization() {}
