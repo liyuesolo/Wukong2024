@@ -24,4 +24,5 @@ file(GLOB SOURCES "src/*.cpp" "autodiff/*.cpp")
 add_executable(FEM3D ${HEADERS} ${SOURCES})
 
 target_include_directories(FEM3D PUBLIC ../../Libs/spectra/include)
-target_link_libraries(FEM3D ${DEPS} polyscope ipc::toolkit)
+target_link_libraries(FEM3D ${DEPS} polyscope ipc::toolkit ${CHOLMOD_ALL_LIBS})
+
