@@ -4,18 +4,17 @@
 
 void NeuralMaterialModel::queryNetworkDerivatives()
 {
-    std::vector<double> green_strain = {
-        1.4993361547313864,
-        0.6685942392647602,
-        1.1691530319834016
+    std::vector<double> green_strain_batch = {
+        -0.03333, 0.0, 0.03333, -0.03333, 0.0, 0.0, 0.0, 0.0, 0.0,
+        -0.03333, 0.0, 0.03333, -0.03333, 0.0, 0.0, 0.0, 0.0, 0.0
     };
 
-    std::vector<double> green_strain_batch(3 * 10000, 1.0);
+    // std::vector<double> green_strain_batch(18 * 1, 1.0);
     
     // cppflow::tensor strain_tf_tensor(green_strain, {1, 3});
-    cppflow::tensor strain_tf_tensor(green_strain_batch, {10000, 3});
+    cppflow::tensor strain_tf_tensor(green_strain_batch, {1, 18});
 
-    cppflow::model model("../../../Projects/NeuralMaterialModel/python/Models/9");
+    cppflow::model model("../../../Projects/NeuralMaterialModel/python/Models/10");
     for (int i = 0; i < 10; i++)
     {
         START_TIMING(prediction)
@@ -30,11 +29,12 @@ void NeuralMaterialModel::queryNetworkDerivatives()
             }
         );
         FINISH_TIMING_PRINT(prediction)
+        std::cout << "energy " << output[0] << std::endl;
+        std::cout << "grad " << output[1] << std::endl;
+        std::cout << "hessian " << output[2] << std::endl;
+        std::getchar();
     }
     
     
     
-    // std::cout << "energy " << output[0] << std::endl;
-    // std::cout << "grad " << output[1] << std::endl;
-    // std::cout << "hessian " << output[2] << std::endl;
 }

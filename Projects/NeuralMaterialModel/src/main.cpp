@@ -8,7 +8,7 @@ int main()
 
     cppflow::model tf_model(base_folder + "NeuralMaterialModel/python/Models/10");
     NeuralMaterialModel neural_model(tf_model);
-
+    // neural_model.queryNetworkDerivatives();
 
     DiscreteShellMacro<NeuralMaterialModel> discrete_shell(neural_model);
     discrete_shell.initializeFromFile(base_folder + "/DiscreteShell/data/grid.obj");

@@ -500,6 +500,7 @@ void DiscreteShell::addShellInplaneHessianEntries(std::vector<Entry>& entries)
         addHessianEntry<3, 3>(entries, {indices[0], indices[1], indices[2]}, hess);
 
         
+
     });
 }
 

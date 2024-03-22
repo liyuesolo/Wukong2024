@@ -81,7 +81,7 @@ public:
 
     
 
-private:
+public:
     template <class OP>
     void iterateDirichletDoF(const OP& f) 
     {

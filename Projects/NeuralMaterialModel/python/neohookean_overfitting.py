@@ -395,28 +395,142 @@ if __name__ == "__main__":
     #     train_data, train_label, validation_data, validation_label)
 
     model = buildConstitutiveModel()
-    # model.load_weights("./Models/9/" + model_name + '.tf')
-    # model.save("./Models/9/", save_format='tf')
 
+    
 
     class NeuralModel(keras.Model):
         def __init__(self):
             super().__init__()
             self.model = model
-            self.model.load_weights("./Models/9/" + model_name + '.tf')
-        def call(self, strain):
+            self.model.load_weights("./Models/10/" + model_name + '.tf')
+        @tf.function
+        def barycentric_jacobian(self, a, b, c, batch_dim):
+            v0 = b - a
+            v1 = c - a
+            
+            d00 = tf.reduce_sum(v0 * v0, axis=1, keepdims=True)
+            d01 = tf.reduce_sum(v0 * v1, axis=1, keepdims=True)
+            d11 = tf.reduce_sum(v1 * v1, axis=1, keepdims=True)
+            
+            denom = d00 * d11 - d01 * d01
+            dvdp = (d11 * (b - a) - d01 * (c - a)) / denom
+            dwdp = (d00 * (c - a) - d01 * (b - a)) / denom
+            
+            result = tf.concat([dvdp, dwdp], axis=1)
+            # result = tf.reshape(result, [tf.shape(a)[0], 2, 3])
+            result = tf.reshape(result, (batch_dim, 2, 3))
+            return result
+        @tf.function
+        def compute_3d_cst_deformation_gradient(self, deformed, undeformed, batch_dim):
+            
+            x1_undef = tf.slice(undeformed, [0, 0], [batch_dim, 3])
+        
+            x2_undef = tf.slice(undeformed, [0, 3], [batch_dim, 3])
+            x3_undef = tf.slice(undeformed, [0, 6], [batch_dim, 3])
+
+            x1 = tf.slice(deformed, [0, 0], [batch_dim, 3])
+            x2 = tf.slice(deformed, [0, 3], [batch_dim, 3])
+            x3 = tf.slice(deformed, [0, 6], [batch_dim, 3])
+
+            t_undef = tf.math.l2_normalize(x2_undef - x1_undef, axis=-1)
+            e2_undef = x3_undef - x1_undef
+            q_undef = tf.math.l2_normalize(e2_undef - tf.expand_dims(tf.reduce_sum(t_undef * e2_undef, axis=-1), axis=-1) * t_undef, axis=-1)
+
+            x = tf.stack([x1, x2, x3], axis=2)
+
+            dNdb = tf.constant([[-1.0, -1.0], [1.0, 0.0], [0.0, 1.0]], dtype=tf.float64)
+
+            dBdX = self.barycentric_jacobian(x1_undef, x2_undef, x3_undef, batch_dim)
+            dXdXStar = tf.stack([t_undef, q_undef], axis=-1)
+            
+            def_grad = tf.matmul(tf.matmul(tf.matmul(x, dNdb), dBdX), dXdXStar)
+            return def_grad
+        
+        def call(self, positions):
+            batch_dim = tf.shape(positions)[0]
+            
+            # deformed location for the three vertices per triangle
+            deformed = tf.slice(positions, [0, 0], [batch_dim, 9]) 
+            # deformed = positions[:, :9]
+            # undeformed location for the three vertices per triangle
+            undeformed = tf.slice(positions, [0, 9], [batch_dim, 9]) 
+            # undeformed = positions[:, 9:18]
             with tf.GradientTape() as tape2:
-                tape2.watch(strain)
+                tape2.watch(deformed)
                 with tf.GradientTape() as tape:
-                    tape.watch(strain)
-                    energy_density = self.model(strain)
-                gradients = tape.gradient(energy_density, strain)
-            hessians = tape2.batch_jacobian(gradients, strain)
+                    tape.watch(deformed)
+                    def_grad = self.compute_3d_cst_deformation_gradient(deformed, undeformed, batch_dim)
+                    green_strain = tf.constant(0.5, dtype=tf.float64) * (tf.matmul(tf.transpose(def_grad, perm=[0, 2, 1]), def_grad) - tf.eye(2, dtype=tf.float64, batch_shape=tf.shape(def_grad)[:-2]))
+                    strain_voigt = tf.stack([green_strain[:, 0, 0], green_strain[:, 1, 1], green_strain[:, 1, 0] + green_strain[:, 0, 1]], axis=-1)
+                    energy_density = self.model(strain_voigt)
+                gradients = tape.gradient(energy_density, deformed)
+            hessians = tape2.batch_jacobian(gradients, deformed)
+            # print("hessians", hessians)
+            # exit(0)
             del tape
             del tape2
             return {"energy": energy_density, "gradient": gradients, "hessian": hessians}
+        
     neural_model = NeuralModel()
-    output = neural_model(tf.constant([[1.0, 1.0, 1.0]]))
-    neural_model.save("./Models/9/", save_format='tf')
     
+    input_tensor = tf.constant([[-0.03333, 0.0, 0.03333, -0.03333, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                        -0.03333, 0.0, 0.03333, -0.03333, 0.0, 0.0, 0.0, 0.0, 0.0],
+                                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.03333, -0.03333, 0.0, 0.03333,
+                                         0.0, 0.0, 0.0, 0.0, 0.0, 0.03333, -0.03333, 0.0, 0.03333]], dtype=tf.float64)
+    output = neural_model(input_tensor)
+    # print(output)
+    # neural_model.save("./Models/10/", save_format='tf')
+    
+    # def barycentric_jacobian(a, b, c):
+    #     v0 = b - a
+    #     v1 = c - a
+        
+    #     d00 = tf.reduce_sum(v0 * v0, axis=1, keepdims=True)
+    #     d01 = tf.reduce_sum(v0 * v1, axis=1, keepdims=True)
+    #     d11 = tf.reduce_sum(v1 * v1, axis=1, keepdims=True)
+        
+    #     denom = d00 * d11 - d01 * d01
+    #     dvdp = (d11 * (b - a) - d01 * (c - a)) / denom
+    #     dwdp = (d00 * (c - a) - d01 * (b - a)) / denom
+        
+    #     result = tf.concat([dvdp, dwdp], axis=1)
+    #     result = tf.reshape(result, [a.shape[0], 2, 3])
+    #     return result
+    
+    # def compute_3d_cst_deformation_gradient(deformed, undeformed, batch_dim):
+    #     x1_undef = tf.slice(undeformed, [0, 0], [batch_dim, 3])
+        
+    #     x2_undef = tf.slice(undeformed, [0, 3], [batch_dim, 3])
+    #     x3_undef = tf.slice(undeformed, [0, 6], [batch_dim, 3])
+
+    #     x1 = tf.slice(deformed, [0, 0], [batch_dim, 3])
+    #     x2 = tf.slice(deformed, [0, 3], [batch_dim, 3])
+    #     x3 = tf.slice(deformed, [0, 6], [batch_dim, 3])
+
+    #     t_undef = tf.math.l2_normalize(x2_undef - x1_undef, axis=-1)
+    #     e2_undef = x3_undef - x1_undef
+    #     q_undef = tf.math.l2_normalize(e2_undef - tf.expand_dims(tf.reduce_sum(t_undef * e2_undef, axis=-1), axis=-1) * t_undef, axis=-1)
+
+    #     x = tf.stack([x1, x2, x3], axis=2)
+
+    #     dNdb = tf.constant([[-1.0, -1.0], [1.0, 0.0], [0.0, 1.0]], dtype=tf.float64)
+
+    #     dBdX = barycentric_jacobian(x1_undef, x2_undef, x3_undef)
+    #     dXdXStar = tf.stack([t_undef, q_undef], axis=-1)
+        
+    #     def_grad = tf.matmul(tf.matmul(tf.matmul(x, dNdb), dBdX), dXdXStar)
+    #     return def_grad
+    
+    # deformed = tf.constant([[-0.03333, 0.0, 0.03333, -0.03333, 0.0, 0.0, 0.0, 0.0, 0.0],
+    #                         [0.0, 0.0, 0.0, 0.0, 0.0, 0.03333, -0.03333, 0.0, 0.03333]], dtype=tf.float64)
+    # undeformed = tf.constant([[-0.03333, 0.0, 0.03333, -0.03333, 0.0, 0.0, 0.0, 0.0, 0.0],
+    #                           [0.0, 0.0, 0.0, 0.0, 0.0, 0.03333, -0.03333, 0.0, 0.03333]], dtype=tf.float64)
+
+    # def_grad = compute_3d_cst_deformation_gradient(deformed, undeformed, 2)
+    # # print(def_grad)
+    # green_strain = tf.constant(0.5, dtype=tf.float64) * (tf.matmul(tf.transpose(def_grad, perm=[0, 2, 1]), def_grad) - tf.eye(2, dtype=tf.float64, batch_shape=tf.shape(def_grad)[:-2]))
+    # # print(green_strain)
+    # strain_voigt = tf.stack([green_strain[:, 0, 0], green_strain[:, 1, 1], green_strain[:, 1, 0] + green_strain[:, 0, 1]], axis=-1)
+    # print(strain_voigt)
+
     
