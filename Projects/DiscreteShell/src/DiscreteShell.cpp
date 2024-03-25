@@ -628,3 +628,212 @@ void DiscreteShell::addShellGravitionHessianEntry(std::vector<Entry>& entries)
             
     });
 }
+
+// ============================= DERIVATIVE TESTS =============================
+
+void DiscreteShell::checkTotalGradient(bool perturb)
+{
+    run_diff_test = true;
+
+    int n_dof = deformed.rows();
+
+    if (perturb)
+    {
+        VectorXT du(n_dof);
+        du.setRandom();
+        du *= 1.0 / du.norm();
+        du *= 0.001;
+        u += du;
+    }
+
+    std::cout << "======================== CHECK GRADIENT ========================" << std::endl;
+    std::cout << "****** Only mismatching entries are printed ******" << std::endl;
+    
+    T epsilon = 1e-6;
+    VectorXT gradient(n_dof);
+    gradient.setZero();
+
+    computeResidual(gradient);
+
+    // std::cout << gradient.transpose() << std::endl;
+    
+    VectorXT gradient_FD(n_dof);
+    gradient_FD.setZero();
+
+    int cnt = 0;
+    for(int dof_i = 0; dof_i < n_dof; dof_i++)
+    {
+        u(dof_i) += epsilon;
+        // std::cout << W * dq << std::endl;
+        T E0 = computeTotalEnergy();
+        
+        u(dof_i) -= 2.0 * epsilon;
+        T E1 = computeTotalEnergy();
+        u(dof_i) += epsilon;
+        // std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
+        gradient_FD(dof_i) = (E1 - E0) / (2.0 *epsilon);
+        if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
+            continue;
+        if (std::abs( gradient_FD(dof_i) - gradient(dof_i)) < 1e-3 * std::abs(gradient(dof_i)))
+            continue;
+        std::cout << " dof " << dof_i << " " << gradient_FD(dof_i) << " " << gradient(dof_i) << std::endl;
+        std::getchar();
+        cnt++;   
+    }
+    std::cout << "Gradient Diff Test Finished" << std::endl;
+    run_diff_test = false;
+}
+
+void DiscreteShell::checkTotalGradientScale(bool perturb)
+{
+    run_diff_test = true;
+    
+    std::cout << "===================== Check Gradient Scale =====================" << std::endl;
+    std::cout << "********************You Should Be Seeing 4s********************" << std::endl;
+    
+    int n_dof = deformed.rows();
+
+    if (perturb)
+    {
+        VectorXT du(n_dof);
+        du.setRandom();
+        du *= 1.0 / du.norm();
+        du *= 0.001;
+        u += du;
+    }
+
+    VectorXT gradient(n_dof);
+    gradient.setZero();
+    computeResidual(gradient);
+    gradient *= -1;
+    T E0 = computeTotalEnergy();
+    VectorXT dx(n_dof);
+    dx.setRandom();
+    dx *= 1.0 / dx.norm();
+    dx *= 0.01;
+    T previous = 0.0;
+    VectorXT u_backup = u;
+    for (int i = 0; i < 10; i++)
+    {
+        u = u_backup + dx;
+        T E1 = computeTotalEnergy();
+        T dE = E1 - E0;
+        
+        dE -= gradient.dot(dx);
+        // std::cout << "dE " << dE << std::endl;
+        if (i > 0)
+        {
+            std::cout << (previous/dE) << std::endl;
+        }
+        previous = dE;
+        dx *= 0.5;
+    }
+    run_diff_test = false;
+}
+
+
+void DiscreteShell::checkTotalHessian(bool perturb)
+{
+    std::cout << "======================== CHECK Hessian ========================" << std::endl;
+    std::cout << "****** Only mismatching entries are printed ******" << std::endl;
+    run_diff_test = true;
+    T epsilon = 1e-5;
+    int n_dof = deformed.rows();
+
+    if (perturb)
+    {
+        VectorXT du(n_dof);
+        du.setRandom();
+        du *= 1.0 / du.norm();
+        du *= 0.001;
+        u += du;
+    }
+    StiffnessMatrix A(n_dof, n_dof);
+    buildSystemMatrix(A);
+    
+    for(int dof_i = 0; dof_i < n_dof; dof_i++)
+    {
+        // std::cout << dof_i << std::endl;
+        u(dof_i) += epsilon;
+        VectorXT g0(n_dof), g1(n_dof);
+        g0.setZero(); g1.setZero();
+        
+        computeResidual(g0); 
+        
+        u(dof_i) -= 2.0 * epsilon;
+        
+        computeResidual(g1); 
+        
+        u(dof_i) += epsilon;
+        VectorXT row_FD = (g1 - g0) / (2.0 * epsilon);
+
+        for(int i = 0; i < n_dof; i++)
+        {
+            
+            if(A.coeff(i, dof_i) == 0 && row_FD(i) == 0)
+                continue;
+            if (std::abs( A.coeff(i, dof_i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
+                continue;
+            // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
+            //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
+            //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::cout << "H(" << i << ", " << dof_i << ") " << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::getchar();
+        }
+    }
+    std::cout << "Hessian Diff Test Finished" << std::endl;
+    run_diff_test = false;
+}
+
+
+void DiscreteShell::checkTotalHessianScale(bool perturb)
+{
+    std::cout << "===================== check Hessian Scale =====================" << std::endl;
+    std::cout << "********************You Should Be Seeing 4s********************" << std::endl;
+    std::cout << "************** Unless your function is quadratic **************" << std::endl;
+    run_diff_test = true;
+    int n_dof = deformed.rows();
+
+    if (perturb)
+    {
+        VectorXT du(n_dof);
+        du.setRandom();
+        du *= 1.0 / du.norm();
+        du *= 0.001;
+        u += du;
+    }
+    
+    StiffnessMatrix A(n_dof, n_dof);
+    
+    buildSystemMatrix(A);
+
+    VectorXT f0(n_dof);
+    f0.setZero();
+    computeResidual(f0);
+    f0 *= -1;
+    
+    VectorXT dx(n_dof);
+    dx.setRandom();
+    dx *= 1.0 / dx.norm();
+    for(int i = 0; i < n_dof; i++) dx[i] += 0.5;
+    dx *= 0.001;
+    T previous = 0.0;
+    VectorXT u_backup = u;
+    for (int i = 0; i < 10; i++)
+    {
+        VectorXT f1(n_dof);
+        f1.setZero();
+        u = u_backup + dx;
+        computeResidual(f1);
+        f1 *= -1;
+        T df_norm = (f0 + (A * dx) - f1).norm();
+        // std::cout << "df_norm " << df_norm << std::endl;
+        if (i > 0)
+        {
+            std::cout << (previous/df_norm) << std::endl;
+        }
+        previous = df_norm;
+        dx *= 0.5;
+    }
+    run_diff_test = false;
+}

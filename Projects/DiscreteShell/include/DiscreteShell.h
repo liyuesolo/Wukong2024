@@ -359,6 +359,12 @@ public:
 
     void setHingeStiffness();
 
+    // derivative tests
+    void checkTotalGradient(bool perturb = false);
+    void checkTotalGradientScale(bool perturb = false);
+    void checkTotalHessian(bool perturb = false);
+    void checkTotalHessianScale(bool perturb = false);
+    
 public:
     DiscreteShell() 
     {

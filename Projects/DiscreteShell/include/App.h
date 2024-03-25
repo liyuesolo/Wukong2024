@@ -28,10 +28,10 @@ public:
     void initializeScene()
     {
         polyscope::options::autocenterStructures = true;
-        polyscope::view::windowWidth = 1024;
-        polyscope::view::windowHeight = 1024;
+        polyscope::view::windowWidth = 3000;
+        polyscope::view::windowHeight = 2000;
         polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::ShadowOnly;
-        polyscope::options::groundPlaneHeightFactor = 0.; 
+        polyscope::options::groundPlaneHeightFactor = 0.6; 
         polyscope::options::shadowDarkness = 0.4;
 
         // Initialize polyscope
@@ -77,6 +77,16 @@ public:
             vectorToIGLMatrix<T, 3>(simulation.deformed, meshV);
             vectorToIGLMatrix<int, 3>(simulation.faces, meshF);
             polyscope::registerSurfaceMesh("surface mesh", meshV, meshF);
+        }
+        if (ImGui::Button("check derivative")) 
+        {
+            simulation.checkTotalGradient(true);
+            simulation.checkTotalHessian(true);
+        }
+        if (ImGui::Button("check derivative scale")) 
+        {
+            simulation.checkTotalGradientScale(true);
+            simulation.checkTotalHessianScale(true);
         }
         if (ImGui::Checkbox("Gravity", &simulation.add_gravity)) 
         {
