@@ -41,25 +41,73 @@ public:
 public:
     void queryNetworkDerivatives();
 
-    template<int dim>
-    VectorXT valueBatch(const Vector<T, dim>& input, int batch_dim = 1)
+    
+    VectorXT valueBatch(const VectorXT& input, int batch_dim)
     {
-        VectorXT value_batch = VectorXT::Zero(batch_dim);
-        
+        int data_dim = input.rows() / batch_dim;
+        std::vector<double> nn_input(input.rows());
+        for (int i = 0; i < input.rows(); i++)
+            nn_input[i] = input[i];
+        cppflow::tensor input_tensor(nn_input, {batch_dim, data_dim});
+        auto output = neural_model(
+            {
+                {"serving_default_input_1:0", input_tensor}
+            },
+            {
+                "StatefulPartitionedCall:0", 
+                "StatefulPartitionedCall:1",
+                "StatefulPartitionedCall:2"
+            }
+        );
+        auto data = output[0].get_data<T>();
+        VectorXT value_batch = Eigen::Map<VectorXT>(data.data(), data.size());
         return value_batch;
     }
 
-    template<int dim>
-    VectorXT gradBatch(const Vector<T, dim>& input, int batch_dim = 1)
+    
+    VectorXT gradBatch(const VectorXT& input, int batch_dim)
     {
-        VectorXT grad_batch = VectorXT::Zero(batch_dim * dim);
+        int data_dim = input.rows() / batch_dim;
+        std::vector<double> nn_input(input.rows());
+        for (int i = 0; i < input.rows(); i++)
+            nn_input[i] = input[i];
+        cppflow::tensor input_tensor(nn_input, {batch_dim, data_dim});
+        auto output = neural_model(
+            {
+                {"serving_default_input_1:0", input_tensor}
+            },
+            {
+                "StatefulPartitionedCall:0", 
+                "StatefulPartitionedCall:1",
+                "StatefulPartitionedCall:2"
+            }
+        );
+        auto data = output[1].get_data<T>();
+        VectorXT grad_batch = Eigen::Map<VectorXT>(data.data(), data.size());
         return grad_batch;
     }
 
-    template<int dim>
-    VectorXT hessBatch(const Vector<T, dim>& input, int batch_dim = 1)
+    
+    VectorXT hessBatch(const VectorXT& input, int batch_dim)
     {
-        VectorXT hess_batch = VectorXT::Zero(batch_dim * dim * dim);
+        int data_dim = input.rows() / batch_dim;
+        std::vector<double> nn_input(input.rows());
+        for (int i = 0; i < input.rows(); i++)
+            nn_input[i] = input[i];
+        cppflow::tensor input_tensor(nn_input, {batch_dim, data_dim});
+        auto output = neural_model(
+            {
+                {"serving_default_input_1:0", input_tensor}
+            },
+            {
+                "StatefulPartitionedCall:0", 
+                "StatefulPartitionedCall:1",
+                "StatefulPartitionedCall:2"
+            }
+        );
+        auto data = output[2].get_data<T>();
+        VectorXT hess_batch = Eigen::Map<VectorXT>(data.data(), data.size());
+        
         return hess_batch;
     }
 

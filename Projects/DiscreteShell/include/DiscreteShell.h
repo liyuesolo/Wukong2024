@@ -297,6 +297,15 @@ public:
     }
 
     template <typename OP>
+    void iterateFaceParallel(const OP& f)
+    {
+        tbb::parallel_for(0, int(faces.rows()/3), [&](int i)
+        {
+            f(i);
+        });
+    }
+
+    template <typename OP>
     void iterateTriangleSerial(const OP& f)
     {
         for (int i = 0; i < triangles.size(); i++)

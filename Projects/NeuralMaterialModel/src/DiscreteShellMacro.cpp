@@ -4,20 +4,11 @@
 template<class NativeScaleModel>
 void DiscreteShellMacro<NativeScaleModel>::addShellInplaneEnergy(T& energy)
 {
-    
+    VectorXT batch_data(nFaces() * 18);
     iterateFaceSerial([&](int face_idx)
     {
         FaceVtx vertices = getFaceVtxDeformed(face_idx);
         FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
-
-        FaceIdx indices = faces.segment<3>(face_idx * 3);
-        
-        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
-        TV X0 = undeformed_vertices.row(0); 
-        TV X1 = undeformed_vertices.row(1); 
-        TV X2 = undeformed_vertices.row(2);
-
-        T k_s = E * thickness / (1.0 - nu * nu);
         
         VectorXT nn_input(18);
         for (int i = 0; i < 3; i++)
@@ -25,10 +16,11 @@ void DiscreteShellMacro<NativeScaleModel>::addShellInplaneEnergy(T& energy)
         for (int i = 0; i < 3; i++)
             nn_input.segment<3>(9 + i * 3) = undeformed_vertices.row(i);
 
-        T value = native_scale_model.value(nn_input);
-        energy += value;
+        batch_data.segment<18>(face_idx * 18) = nn_input;
     });
 
+    VectorXT value = native_scale_model.valueBatch(batch_data, nFaces());
+    energy += value.sum();
 }
 
 inline Matrix<T, 2, 3> barycentricJacobian(const Vector<T, 3> &a, const Vector<T, 3> &b, const Vector<T, 3> &c)
@@ -81,7 +73,8 @@ inline Matrix<T, 3, 2> compute3DCSTDeformationGradient(
 template<class NativeScaleModel>
 void DiscreteShellMacro<NativeScaleModel>::addShellInplaneForceEntries(VectorXT& residual)
 {
-    iterateFaceSerial([&](int face_idx)
+    VectorXT batch_data(nFaces() * 18);
+    iterateFaceParallel([&](int face_idx)
     {
         FaceVtx vertices = getFaceVtxDeformed(face_idx);
         FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
@@ -91,20 +84,28 @@ void DiscreteShellMacro<NativeScaleModel>::addShellInplaneForceEntries(VectorXT&
         TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
          
-        VectorXT nn_input(18);
+        Vector<T, 18> nn_input;
         for (int i = 0; i < 3; i++)
             nn_input.segment<3>(i * 3) = vertices.row(i);
         for (int i = 0; i < 3; i++)
             nn_input.segment<3>(9 + i * 3) = undeformed_vertices.row(i);
-        Vector<T, 9> dedx = native_scale_model.grad(nn_input);
-        addForceEntry<3>(residual, {indices[0], indices[1], indices[2]}, -dedx);
+        batch_data.segment<18>(face_idx * 18) = nn_input;
+    });
+
+    VectorXT dedx = native_scale_model.gradBatch(batch_data, nFaces());
+
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceIdx indices = faces.segment<3>(face_idx * 3);
+        addForceEntry<3>(residual, {indices[0], indices[1], indices[2]}, -dedx.segment<9>(face_idx * 9)); 
     });
 }
 
 template<class NativeScaleModel>
 void DiscreteShellMacro<NativeScaleModel>::addShellInplaneHessianEntries(std::vector<Entry>& entries)
 {
-    iterateFaceSerial([&](int face_idx)
+    VectorXT batch_data(nFaces() * 18);
+    iterateFaceParallel([&](int face_idx)
     {
         FaceVtx vertices = getFaceVtxDeformed(face_idx);
         FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
@@ -114,14 +115,24 @@ void DiscreteShellMacro<NativeScaleModel>::addShellInplaneHessianEntries(std::ve
         TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
 
-        VectorXT nn_input(18);
+        Vector<T, 18> nn_input;
         for (int i = 0; i < 3; i++)
             nn_input.segment<3>(i * 3) = vertices.row(i);
         for (int i = 0; i < 3; i++)
             nn_input.segment<3>(9 + i * 3) = undeformed_vertices.row(i);
+        batch_data.segment<18>(face_idx * 18) = nn_input;
+    });
 
-        Matrix<T, 9, 9> hess = native_scale_model.hess(nn_input);
-        
+    VectorXT d2edx2 = native_scale_model.hessBatch(batch_data, nFaces());
+
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceIdx indices = faces.segment<3>(face_idx * 3);
+        VectorXT hess_vector = d2edx2.segment<81>(face_idx * 81);
+        Matrix<T, 9, 9> hess;
+        for (int d = 0; d < 9; d++)
+            for (int dd = 0; dd < 9; dd++)
+                hess(d, dd) = hess_vector(d * 9 + dd);
         addHessianEntry<3, 3>(entries, {indices[0], indices[1], indices[2]}, hess); 
     });
 }
