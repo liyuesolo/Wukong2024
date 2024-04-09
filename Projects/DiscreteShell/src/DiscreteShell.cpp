@@ -1,5 +1,6 @@
 #include <Eigen/CholmodSupport>
 #include <igl/readOBJ.h>
+#include <igl/massmatrix.h>
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
 #include <Spectra/SymEigsSolver.h>
@@ -8,37 +9,82 @@
 #include "../autodiff/CST3DShell.h"
 #include "../include/DiscreteShell.h"
 
+bool DiscreteShell::advanceOneTimeStep()
+{
+    int iter = 0;
+    while (true)
+    {
+        VectorXT residual;
+        residual.resize(deformed.rows());
+        residual.setZero();
+        T residual_norm = computeResidual(residual);
+        // residual_norms.push_back(residual_norm);
+        if (verbose)
+            std::cout << "[NEWTON] iter " << iter << "/" 
+                << max_newton_iter << ": residual_norm " 
+                << residual_norm << " tol: " << newton_tol << std::endl;
+        if (residual_norm < newton_tol || iter == max_newton_iter)
+        {
+            std::cout << "[NEWTON] iter " << iter << "/" 
+                << max_newton_iter << ": residual_norm " 
+                << residual_norm << " tol: " << newton_tol << std::endl;
+            break;
+        }
+        T du_norm = 1e10;
+        du_norm = lineSearchNewton(residual);
+        if (du_norm < 1e-10)
+            break;
+        iter ++;
+        
+    }
+    return true;
+}
+
 bool DiscreteShell::advanceOneStep(int step)
 {
-    std::cout << "===================STEP " << step << "===================" << std::endl;
-    VectorXT residual;
-    residual.resize(deformed.rows());
-    residual.setZero();
-    T residual_norm = computeResidual(residual);
-    residual_norms.push_back(residual_norm);
-    std::cout << "[NEWTON] iter " << step << "/" 
-        << max_newton_iter << ": residual_norm " 
-        << residual_norm << " tol: " << newton_tol << std::endl;
-    if (residual_norm < newton_tol || step == max_newton_iter)
+    if (dynamics)
     {
-        return true;
+        std::cout << "=================== Time STEP " << step * dt << "s===================" << std::endl;
+        bool finished = advanceOneTimeStep();
+        updateDynamicStates();
+        if (step * dt > simulation_duration)
+            return true;
+        return false;
     }
+    else
+    {
+        std::cout << "===================STEP " << step << "===================" << std::endl;
+        VectorXT residual;
+        residual.resize(deformed.rows());
+        residual.setZero();
+        T residual_norm = computeResidual(residual);
+        residual_norms.push_back(residual_norm);
+        std::cout << "[NEWTON] iter " << step << "/" 
+            << max_newton_iter << ": residual_norm " 
+            << residual_norm << " tol: " << newton_tol << std::endl;
+        if (residual_norm < newton_tol || step == max_newton_iter)
+        {
+            return true;
+        }
 
-    T du_norm = 1e10;
-    du_norm = lineSearchNewton(residual);
-    return false;
+        T du_norm = 1e10;
+        du_norm = lineSearchNewton(residual);
+        return false;
+    }
 }
 
 bool DiscreteShell::linearSolve(StiffnessMatrix& K, const VectorXT& residual, VectorXT& du)
 {
     START_TIMING(LinearSolve)
     Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
-    // Eigen::CholmodSupernodalLLT<StiffnessMatrix> solver;
     
     T alpha = 1e-6;
-    StiffnessMatrix H(K.rows(), K.cols());
-    H.setIdentity(); H.diagonal().array() = 1e-10;
-    K += H;
+    if (!dynamics)
+    {
+        StiffnessMatrix H(K.rows(), K.cols());
+        H.setIdentity(); H.diagonal().array() = 1e-10;
+        K += H;
+    }
     solver.analyzePattern(K);
     // T time_analyze = t.elapsed_sec();
     // std::cout << "\t analyzePattern takes " << time_analyze << "s" << std::endl;
@@ -131,6 +177,8 @@ T DiscreteShell::computeTotalEnergy()
     addShellEnergy(energy);
     if (add_gravity)
         addShellGravitionEnergy(energy);
+    if (dynamics)
+        addInertialEnergy(energy);
     return energy;
 }
 
@@ -140,6 +188,8 @@ T DiscreteShell::computeResidual(VectorXT& residual)
     addShellForceEntry(residual);
     if (add_gravity)
         addShellGravitionForceEntry(residual);
+    if (dynamics)
+        addInertialForceEntry(residual);
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
         {
@@ -190,7 +240,8 @@ void DiscreteShell::buildSystemMatrix(StiffnessMatrix& K)
     addShellHessianEntries(entries);
     if (add_gravity)
         addShellGravitionHessianEntry(entries);
-    
+    if (dynamics)
+        addInertialHessianEntries(entries);
     int n_dof = deformed.rows();
     K.resize(n_dof, n_dof);
     K.setFromTriplets(entries.begin(), entries.end());
@@ -240,21 +291,30 @@ T DiscreteShell::lineSearchNewton(const VectorXT& residual)
         T E1 = computeTotalEnergy();
         if (E1 - E0 < 0 || cnt > 10)
         {
-            if (cnt > 10)
-                std::cout << "cnt > 10" << std::endl;
+            // if (cnt > 10)
+                // std::cout << "cnt > 10" << " |du| " << norm << " |g| " << residual.norm() << std::endl;
             break;
         }
         alpha *= 0.5;
         cnt += 1;
     }
 
-    return du.norm();
+    return alpha * du.norm();
 }
 
 void DiscreteShell::initializeFromFile(const std::string& filename)
 {
     MatrixXT V; MatrixXi F;
     igl::readOBJ(filename, V, F);
+
+    TV min_corner = V.colwise().minCoeff();
+    TV max_corner = V.colwise().maxCoeff();
+
+    T bb_diag = (max_corner - min_corner).norm();
+
+    V *= 1.0 / bb_diag;
+
+    V *= 0.5;
 
     auto rotationMatrixFromEulerAngle = [](T angle_z, T angle_y, T angle_x)
     {
@@ -287,10 +347,20 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
     deformed = undeformed;
     u = VectorXT::Zero(deformed.rows());
     buildHingeStructure();
+    dynamics = true;
+    add_gravity = true;
+    use_consistent_mass_matrix = true;
+    // E = 0.0;
+    dt = 1e-2;
+    simulation_duration = 1000000;
+    
+    hinge_stiffness.setConstant(10);
+    if (dynamics)
+    {
+        initializeDynamicStates();
+    }
     
 }
-
-
 
 void DiscreteShell::buildHingeStructure()
 {
@@ -686,6 +756,7 @@ void DiscreteShell::checkTotalGradient(bool perturb)
 
 void DiscreteShell::checkTotalGradientScale(bool perturb)
 {
+    
     run_diff_test = true;
     
     std::cout << "===================== Check Gradient Scale =====================" << std::endl;
@@ -788,6 +859,7 @@ void DiscreteShell::checkTotalHessian(bool perturb)
 
 void DiscreteShell::checkTotalHessianScale(bool perturb)
 {
+    
     std::cout << "===================== check Hessian Scale =====================" << std::endl;
     std::cout << "********************You Should Be Seeing 4s********************" << std::endl;
     std::cout << "************** Unless your function is quadratic **************" << std::endl;
@@ -837,3 +909,245 @@ void DiscreteShell::checkTotalHessianScale(bool perturb)
     }
     run_diff_test = false;
 }
+// ============================= DERIVATIVE TESTS END =============================
+
+
+// ============================= Dynamics =============================
+void DiscreteShell::addInertialEnergy(T& energy)
+{
+    T kinetic_energy = 0.0;
+    if (use_consistent_mass_matrix)
+    {
+        iterateFaceSerial([&](int face_idx)
+        {
+            FaceVtx vertices = getFaceVtxDeformed(face_idx);
+            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+            FaceIdx indices = faces.segment<3>(face_idx * 3);
+            Matrix<T, 9, 9> mass_mat;
+            computeConsistentMassMatrix(undeformed_vertices, mass_mat);
+            Vector<T, 9> x_n_plus_1_vec, xn_vec, vn_vec;
+            for (int i = 0; i < 3; i++)
+            {
+                x_n_plus_1_vec.segment<3>(i * 3) = vertices.row(i);
+                xn_vec.segment<3>(i * 3) = xn.segment<3>(indices[i] * 3);
+                vn_vec.segment<3>(i * 3) = vn.segment<3>(indices[i] * 3);
+            }
+
+            T xTMx = x_n_plus_1_vec.transpose() * mass_mat * x_n_plus_1_vec;
+            T xTMxn_vn_dt = 2.0 * x_n_plus_1_vec.transpose() * mass_mat * (xn_vec + vn_vec * dt);
+            kinetic_energy += (xTMx - xTMxn_vn_dt) / (2.0 * std::pow(dt, 2));
+
+            // std::cout << "vn_vec " << vn_vec << " " << "xn_vec " << xn_vec << " x_n_plus_1_vec " << x_n_plus_1_vec << std::endl;
+            // std::cout << "xTMx " << xTMx << " " << "xTMxn_vn_dt " << xTMxn_vn_dt << std::endl;
+            // kinetic_energy += (x_n_plus_1_vec.transpose() * mass_mat * x_n_plus_1_vec 
+            //     - 2.0 * x_n_plus_1_vec.transpose() * mass_mat * (xn_vec + vn_vec * dt))(0)
+            //     / (2.0 * std::pow(dt, 2));
+            
+            // std::cout << "kinetic_energy " << kinetic_energy << std::endl;
+            // std::getchar();
+        });
+    }
+    else
+    {
+        for (int i = 0; i < deformed.rows() / 3; i++)
+        {
+            TV x_n_plus_1 = deformed.segment<3>(i * 3);
+            kinetic_energy += (density * mass_diagonal[i] * (x_n_plus_1.dot(x_n_plus_1)
+                                                    - 2.0 * x_n_plus_1.dot(xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
+                                                    )) / (2.0 * std::pow(dt, 2));
+        }
+    }
+    
+    energy += kinetic_energy;
+}
+
+void DiscreteShell::addInertialForceEntry(VectorXT& residual)
+{
+    if (use_consistent_mass_matrix)
+    {
+        iterateFaceSerial([&](int face_idx)
+        {
+            FaceVtx vertices = getFaceVtxDeformed(face_idx);
+            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+            FaceIdx indices = faces.segment<3>(face_idx * 3);
+            Matrix<T, 9, 9> mass_mat;
+            computeConsistentMassMatrix(undeformed_vertices, mass_mat);
+            Vector<T, 9> x_n_plus_1_vec, xn_vec, vn_vec;
+            for (int i = 0; i < 3; i++)
+            {
+                x_n_plus_1_vec.segment<3>(i * 3) = vertices.row(i);
+                xn_vec.segment<3>(i * 3) = xn.segment<3>(indices[i] * 3);
+                vn_vec.segment<3>(i * 3) = vn.segment<3>(indices[i] * 3);
+            }
+            Vector<T, 9> dedx = mass_mat * (2.0 * x_n_plus_1_vec - 2.0 * (xn_vec + vn_vec * dt)) / (2.0 * std::pow(dt, 2));
+            addForceEntry<3>(residual, {indices[0], indices[1], indices[2]}, -dedx);
+        });
+    }
+    else
+    {
+        for (int i = 0; i < deformed.rows() / 3; i++)
+        {
+            TV x_n_plus_1 = deformed.segment<3>(i * 3);
+            residual.segment<3>(i * 3) -= (density * mass_diagonal[i] * (2.0 * x_n_plus_1
+                                                    - 2.0 * (xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
+                                                    )) / (2.0 * std::pow(dt, 2));
+        }
+    }
+}
+
+void DiscreteShell::addInertialHessianEntries(std::vector<Entry>& entries)
+{
+    if (use_consistent_mass_matrix)
+    {
+        iterateFaceSerial([&](int face_idx)
+        {
+            FaceVtx vertices = getFaceVtxDeformed(face_idx);
+            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+            Matrix<T, 9, 9> mass_mat;
+            computeConsistentMassMatrix(undeformed_vertices, mass_mat);
+            FaceIdx indices = faces.segment<3>(face_idx * 3);
+            addHessianEntry<3, 3>(entries, {indices[0], indices[1], indices[2]}, mass_mat / std::pow(dt, 2));
+        });
+    }
+    else
+    {
+        for (int i = 0; i < deformed.rows() / 3; i++)
+        {
+            TM hess = density * TM::Identity() * mass_diagonal[i] / std::pow(dt, 2);
+            addHessianEntry<3, 3>(entries, {i}, hess);
+        }
+    }
+}
+
+void DiscreteShell::updateDynamicStates()
+{
+    vn = (deformed - xn) / dt;
+    xn = deformed;
+}
+
+void DiscreteShell::initializeDynamicStates()
+{
+    if (!use_consistent_mass_matrix)
+        computeMassMatrix();
+    xn = undeformed;
+    vn = VectorXT::Zero(undeformed.rows());
+}
+
+void DiscreteShell::computeMassMatrix()
+{
+    MatrixXT V; MatrixXi F;
+    vectorToIGLMatrix<T, 3>(undeformed, V);
+    vectorToIGLMatrix<int, 3>(faces, F);
+    igl::massmatrix(V, F, igl::MASSMATRIX_TYPE_VORONOI, M);
+    mass_diagonal.resize(deformed.rows() / 3);
+    mass_diagonal.setZero();
+    mass_diagonal = M.diagonal();   
+}
+
+void DiscreteShell::computeConsistentMassMatrix(const FaceVtx& vtx_pos, Matrix<T, 9, 9>& mass_mat)
+{
+    double m[81];
+    T t1 = vtx_pos(0, 0) - vtx_pos(2, 0);
+    T t2 = vtx_pos(0, 1) - vtx_pos(2, 1);
+    T t3 = vtx_pos(0, 2) - vtx_pos(2, 2);
+    T t4 = vtx_pos(1, 0) - vtx_pos(2, 0);
+    T t5 = vtx_pos(1, 1) - vtx_pos(2, 1);
+    T t6 = vtx_pos(1, 2) - vtx_pos(2, 2);
+    T t7 = t1 * t4 + t2 * t5 + t3 * t6;
+    t1 = (pow(t1, 0.2e1) + pow(t2, 0.2e1) + pow(t3, 0.2e1)) * (pow(t4, 0.2e1) + pow(t5, 0.2e1) + pow(t6, 0.2e1)) - pow(t7, 0.2e1);
+    t1 = sqrt(t1);
+    t2 = t1 / 0.12e2;
+    t1 = t1 / 0.24e2;
+    m[0] = t2;
+    m[1] = 0;
+    m[2] = 0;
+    m[3] = t1;
+    m[4] = 0;
+    m[5] = 0;
+    m[6] = t1;
+    m[7] = 0;
+    m[8] = 0;
+    m[9] = 0;
+    m[10] = t2;
+    m[11] = 0;
+    m[12] = 0;
+    m[13] = t1;
+    m[14] = 0;
+    m[15] = 0;
+    m[16] = t1;
+    m[17] = 0;
+    m[18] = 0;
+    m[19] = 0;
+    m[20] = t2;
+    m[21] = 0;
+    m[22] = 0;
+    m[23] = t1;
+    m[24] = 0;
+    m[25] = 0;
+    m[26] = t1;
+    m[27] = t1;
+    m[28] = 0;
+    m[29] = 0;
+    m[30] = t2;
+    m[31] = 0;
+    m[32] = 0;
+    m[33] = t1;
+    m[34] = 0;
+    m[35] = 0;
+    m[36] = 0;
+    m[37] = t1;
+    m[38] = 0;
+    m[39] = 0;
+    m[40] = t2;
+    m[41] = 0;
+    m[42] = 0;
+    m[43] = t1;
+    m[44] = 0;
+    m[45] = 0;
+    m[46] = 0;
+    m[47] = t1;
+    m[48] = 0;
+    m[49] = 0;
+    m[50] = t2;
+    m[51] = 0;
+    m[52] = 0;
+    m[53] = t1;
+    m[54] = t1;
+    m[55] = 0;
+    m[56] = 0;
+    m[57] = t1;
+    m[58] = 0;
+    m[59] = 0;
+    m[60] = t2;
+    m[61] = 0;
+    m[62] = 0;
+    m[63] = 0;
+    m[64] = t1;
+    m[65] = 0;
+    m[66] = 0;
+    m[67] = t1;
+    m[68] = 0;
+    m[69] = 0;
+    m[70] = t2;
+    m[71] = 0;
+    m[72] = 0;
+    m[73] = 0;
+    m[74] = t1;
+    m[75] = 0;
+    m[76] = 0;
+    m[77] = t1;
+    m[78] = 0;
+    m[79] = 0;
+    m[80] = t2;
+
+    for (int i = 0; i < 9; i++)
+    {
+        for (int j = 0; j < 9; j++)
+        {
+            mass_mat(i, j) = m[i * 9 + j] * density;
+        }
+        
+    }
+    
+}
+// ============================= Dynamics End =============================

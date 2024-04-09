@@ -46,11 +46,11 @@ public:
     using HingeVtx = Matrix<T, 4, 3>;
 
 public:
-    // material parameter setup
-    T density = 7.85e4; 
+    // material parameter setup1
+    T density = 1.5e3;  //Cotton kg/m^3
     TV gravity = TV(0.0, -9.8, 0.0);    
     T E = 1e6;
-    T nu = 0.48;
+    T nu = 0.45;
 
     T lambda, mu;
 
@@ -73,13 +73,20 @@ public:
     bool use_Newton = true;
     bool add_gravity = false;
     bool jump_out = true;
-    bool verbose = true;
+    bool verbose = false;
+    bool use_consistent_mass_matrix = true;
     T newton_tol = 1e-6;
 
     std::vector<T> residual_norms;
     std::unordered_map<int, T> dirichlet_data;
 
-    
+    bool dynamics = false;
+    T dt = 0.01;
+    T simulation_duration = 10;
+    StiffnessMatrix M;
+    VectorXT mass_diagonal;
+    VectorXT xn;
+    VectorXT vn;
 
 public:
     template <class OP>
@@ -240,6 +247,16 @@ public:
         return eigenSolver.eigenvalues();
     }
 
+    std::vector<Entry> entriesFromSparseMatrix(const StiffnessMatrix &A) 
+    {
+        std::vector<Entry> triplets;
+        for (int k = 0; k < A.outerSize(); ++k)
+            for (StiffnessMatrix::InnerIterator it(A, k); it; ++it)
+                triplets.emplace_back(it.row(), it.col(), it.value());
+        return triplets;
+    }
+
+
     // ====================== discrete shell ==========================
     void updateLameParameters()
     {
@@ -297,6 +314,13 @@ public:
     }
 
     template <typename OP>
+    void iterateNodeSerial(const OP& f)
+    {
+        for (int i = 0; i < deformed.rows()/3; i++)
+            f(i);
+    }
+
+    template <typename OP>
     void iterateFaceParallel(const OP& f)
     {
         tbb::parallel_for(0, int(faces.rows()/3), [&](int i)
@@ -322,10 +346,12 @@ public:
         }
     }
     void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
+    
     // ================================================================
 
 public:
     bool advanceOneStep(int step);
+    bool advanceOneTimeStep();
     bool linearSolve(StiffnessMatrix& K, const VectorXT& residual, VectorXT& du);
     T computeTotalEnergy();
     T computeResidual(VectorXT& residual);
@@ -341,6 +367,15 @@ public:
     void addShellForceEntry(VectorXT& residual);
     void addShellHessianEntries(std::vector<Entry>& entries);
 
+    // virtual function for different time integration schemes
+    //                      different ways of computing the mass matrix
+    virtual void addInertialEnergy(T& energy);
+    virtual void addInertialForceEntry(VectorXT& residual);
+    virtual void addInertialHessianEntries(std::vector<Entry>& entries);
+    virtual void updateDynamicStates();
+    virtual void initializeDynamicStates();
+    virtual void computeMassMatrix();
+    virtual void computeConsistentMassMatrix(const FaceVtx& p, Matrix<T, 9, 9>& mass_mat);
     
     // stretching and bending energy
     virtual void addShellInplaneEnergy(T& energy);
@@ -364,7 +399,7 @@ public:
     void checkTotalGradientScale(bool perturb = false);
     void checkTotalHessian(bool perturb = false);
     void checkTotalHessianScale(bool perturb = false);
-    
+
 public:
     DiscreteShell() 
     {

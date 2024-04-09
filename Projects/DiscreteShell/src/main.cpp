@@ -18,7 +18,7 @@ int main()
         }
     }
     
-    discrete_shell.gravity[1] = 0.098;
+    discrete_shell.gravity[1] = 9.8;
     
     App<DiscreteShell> app(discrete_shell);
     app.initializeScene();

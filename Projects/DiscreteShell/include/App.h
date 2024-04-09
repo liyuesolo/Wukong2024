@@ -69,26 +69,42 @@ public:
         {
             simulation.computeLinearModes(eigen_vectors, eigen_values);   
         }
-        if (ImGui::Button("staticSolveOneStep")) 
+        if (ImGui::Button("advanceOneStep")) 
         {
             simulation.advanceOneStep(static_solve_step++);
-            Eigen::MatrixXd meshV;
-            Eigen::MatrixXi meshF;
             vectorToIGLMatrix<T, 3>(simulation.deformed, meshV);
-            vectorToIGLMatrix<int, 3>(simulation.faces, meshF);
-            polyscope::registerSurfaceMesh("surface mesh", meshV, meshF);
+            psMesh->updateVertexPositions(meshV);
+            // Eigen::MatrixXd meshV;
+            // Eigen::MatrixXi meshF;
+            // vectorToIGLMatrix<int, 3>(simulation.faces, meshF);
+            // polyscope::registerSurfaceMesh("surface mesh", meshV, meshF);
         }
         if (ImGui::Button("check derivative")) 
         {
             simulation.checkTotalGradient(true);
             simulation.checkTotalHessian(true);
         }
+        ImGui::SameLine();
         if (ImGui::Button("check derivative scale")) 
         {
             simulation.checkTotalGradientScale(true);
             simulation.checkTotalHessianScale(true);
         }
+        if (ImGui::Checkbox("ConsistentMass", &simulation.use_consistent_mass_matrix)) 
+        {
+            if (!simulation.use_consistent_mass_matrix)
+                simulation.computeMassMatrix();
+        }
+        if (ImGui::Checkbox("Dynamics", &simulation.dynamics)) 
+        {
+            if (simulation.dynamics)
+                simulation.initializeDynamicStates();   
+        }
         if (ImGui::Checkbox("Gravity", &simulation.add_gravity)) 
+        {
+            
+        }
+        if (ImGui::Checkbox("Verbose", &simulation.verbose)) 
         {
             
         }
