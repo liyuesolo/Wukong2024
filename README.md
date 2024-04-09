@@ -7,11 +7,11 @@ Ideally basic simulation models such as,
 should have only the basic implementation such that they can be inherited whenever needed. 
 
 ### To-Dos
+- [x] dynamics simulation (see Discrete Shell)
 - [ ] Set up application base class
-- [ ] Isohedral Tiling interface
+- [ ] Use curvature binormal for compute dihedral angles
 - [ ] FEM2D
 - [ ] IPC contact examples
-- [ ] dynamics simulation
 
 Author: [Yue Li](https://liyuesolo.github.io/)
 
