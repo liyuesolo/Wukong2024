@@ -67,6 +67,7 @@ public:
 
     VectorXT deformed, undeformed;
     VectorXT u;
+    VectorXT external_force;
 
     bool run_diff_test = false;
     int max_newton_iter = 500;

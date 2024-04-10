@@ -14,9 +14,7 @@ bool DiscreteShell::advanceOneTimeStep()
     int iter = 0;
     while (true)
     {
-        VectorXT residual;
-        residual.resize(deformed.rows());
-        residual.setZero();
+        VectorXT residual = external_force;
         T residual_norm = computeResidual(residual);
         // residual_norms.push_back(residual_norm);
         if (verbose)
@@ -54,9 +52,7 @@ bool DiscreteShell::advanceOneStep(int step)
     else
     {
         std::cout << "===================STEP " << step << "===================" << std::endl;
-        VectorXT residual;
-        residual.resize(deformed.rows());
-        residual.setZero();
+        VectorXT residual = external_force;
         T residual_norm = computeResidual(residual);
         residual_norms.push_back(residual_norm);
         std::cout << "[NEWTON] iter " << step << "/" 
@@ -179,6 +175,7 @@ T DiscreteShell::computeTotalEnergy()
         addShellGravitionEnergy(energy);
     if (dynamics)
         addInertialEnergy(energy);
+    energy -= u.dot(external_force);
     return energy;
 }
 
@@ -190,6 +187,7 @@ T DiscreteShell::computeResidual(VectorXT& residual)
         addShellGravitionForceEntry(residual);
     if (dynamics)
         addInertialForceEntry(residual);
+
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
         {
@@ -335,17 +333,19 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
         return R;
     };
 
-    TM R = rotationMatrixFromEulerAngle(0, 0, M_PI_2);
-    for (int i = 0; i < V.rows(); i++)
-    {
-        V.row(i) = (R * V.row(i).transpose()).transpose();
-    }
+    // TM R = rotationMatrixFromEulerAngle(0, 0, M_PI_2);
+    // for (int i = 0; i < V.rows(); i++)
+    // {
+    //     V.row(i) = (R * V.row(i).transpose()).transpose();
+    // }
     
 
     iglMatrixFatten<T, 3>(V, undeformed);
     iglMatrixFatten<int, 3>(F, faces);
     deformed = undeformed;
     u = VectorXT::Zero(deformed.rows());
+    external_force = VectorXT::Zero(deformed.rows());
+    external_force[5 * 3 + 2] = -10.0;
     buildHingeStructure();
     dynamics = true;
     add_gravity = true;
