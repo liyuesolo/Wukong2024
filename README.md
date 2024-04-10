@@ -13,15 +13,15 @@ should have only the basic implementation such that they can be inherited whenev
 - [ ] FEM2D
 - [ ] IPC contact examples
 
+### ThirdParty Library Dependencies
+Polyscope and Libigl are from git fetch content
+SuiteSparse has to be build locally
+
+### Docker
+docker build -t wukong_docker .
+
+docker run -v local_foler/:/place_in_the_container -it --rm wukong_docker bash
+
 Author: [Yue Li](https://liyuesolo.github.io/)
 
-If WuKong contributes to an academic publication, you can cite it as:
-
-```bib
-@misc{wukong,
-  title = {WuKong},
-  author = {Yue Li},
-  note = {https://github.com/liyuesolo/Wukong2024},
-  year = {2024}
-}
-```
+My dear CRL members please add your contribution!

@@ -33,9 +33,6 @@ endif()
 add_subdirectory("Deps/polyscope")
 
 include(libigl)
-# igl_include(imgui)
-# igl_include(glfw)
-# igl_include(opengl)
 igl_include(predicates)
 
 find_package(CGAL REQUIRED COMPONENTS Core)
