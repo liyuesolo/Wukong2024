@@ -13,7 +13,7 @@ def createCMakeLists(project_name, use_Spectra = True, use_IPC = False):
             gmp mpfr)\n\n"
             )
         f.write("file(GLOB HEADERS \"include/*.h\" \"autodiff/*.h\")\n")
-        f.write("file(GLOB HEADERS \"src/*.cpp\" \"autodiff/*.cpp\")\n\n")
+        f.write("file(GLOB SOURCES \"src/*.cpp\" \"autodiff/*.cpp\")\n\n")
 
         f.write("add_executable("+project_name+" ${HEADERS} ${SOURCES})\n")
         if use_Spectra:
