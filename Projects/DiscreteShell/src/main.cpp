@@ -7,7 +7,7 @@
 int main()
 {
     DiscreteShell discrete_shell;
-    discrete_shell.initializeFromFile("../Projects/DiscreteShell/data/grid.obj");
+    discrete_shell.initializeFromFile("../../../Projects/DiscreteShell/data/grid.obj");
     // discrete_shell.setHingeStiffness();
 
     for (int j = 80; j < 100; j++)

@@ -22,9 +22,9 @@ file(GLOB SOURCES "src/*.cpp" "autodiff/*.cpp")
 add_executable(DiscreteShell ${HEADERS} ${SOURCES})
 add_library(DiscreteShellLib STATIC ${HEADERS} ${SOURCES})
 
-find_package(CHOLMOD REQUIRED)
-include_directories(${CHOLMOD_INCLUDES})
-target_link_libraries(DiscreteShell ${CHOLMOD_LIBRARIES})
+# find_package(CHOLMOD REQUIRED)
+# include_directories(${CHOLMOD_INCLUDES})
+# target_link_libraries(DiscreteShell ${CHOLMOD_LIBRARIES})
 
 target_include_directories(DiscreteShell PUBLIC ../../Libs/spectra/include)
 target_include_directories(DiscreteShell PUBLIC ../../Deps/libigl/include)

@@ -45,6 +45,9 @@ igl_include(predicates)
 find_package(CGAL REQUIRED COMPONENTS Core)
 
 if (NOT APPLE)
+  set(SuiteSparse_ROOT ${CMAKE_SOURCE_DIR}/../SuiteSparse-5.12.0)
+  include_directories(${SuiteSparse_ROOT}/include)
+
   add_definitions(-DEIGEN_USE_MKL_ALL)
   add_definitions(-DMKL_LP64)
   include_directories(${MKLROOT}/include)
