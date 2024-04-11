@@ -28,7 +28,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O0 -fopenmp -Wno-unused-variable 
 
 
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)
-find_package (SuiteSparse REQUIRED)
+# find_package (SuiteSparse REQUIRED)
 find_package (OpenMP REQUIRED)
 if (OPENMP_FOUND)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
@@ -45,17 +45,16 @@ igl_include(predicates)
 find_package(CGAL REQUIRED COMPONENTS Core)
 
 if (NOT APPLE)
-  set(SuiteSparse_ROOT ${CMAKE_SOURCE_DIR}/../SuiteSparse-5.12.0)
-  include_directories(${SuiteSparse_ROOT}/include)
-
   add_definitions(-DEIGEN_USE_MKL_ALL)
   add_definitions(-DMKL_LP64)
   add_definitions(-DUSE_CHOLMOD)
   
-  set(MKLROOT "/opt/intel/oneapi/mkl/2024.0")
+  set(MKLROOT "/opt/intel/oneapi/mkl/2024.1")
   include_directories(${MKLROOT}/include)
-  include_directories(${CHOLMOD_INCLUDE_DIR})
   link_directories(${MKLROOT}/lib)
+
+  include_directories(/usr/local/include/suitesparse)
+  link_directories(/usr/local/lib)
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR})

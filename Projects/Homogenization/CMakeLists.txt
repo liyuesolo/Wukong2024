@@ -2,7 +2,7 @@ set(DEPS boost_filesystem tbb
     tbbmalloc tbbmalloc_proxy 
     mkl_intel_lp64 igl::core
     mkl_sequential mkl_core 
-    suitesparseconfig metis cholmod amd camd ccolamd colamd spqr
+    suitesparseconfig metis cholmod amd camd ccolamd colamd
     gmp mpfr
     )
 
