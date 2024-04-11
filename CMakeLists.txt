@@ -50,11 +50,15 @@ if (NOT APPLE)
 
   add_definitions(-DEIGEN_USE_MKL_ALL)
   add_definitions(-DMKL_LP64)
+  add_definitions(-DUSE_CHOLMOD)
+  
+  set(MKLROOT "/opt/intel/oneapi/mkl/2024.0")
   include_directories(${MKLROOT}/include)
+  include_directories(${CHOLMOD_INCLUDE_DIR})
+  link_directories(${MKLROOT}/lib)
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR})
-
 
 add_subdirectory(Libs)
 add_subdirectory(Projects)

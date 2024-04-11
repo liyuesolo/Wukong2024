@@ -18,10 +18,25 @@ Polyscope and Libigl are from git fetch content
 SuiteSparse has to be build locally
 
 ### Docker
-docker build -t wukong_docker .
+Enable Docker to connect to host display to spawn GUI windows.
+> $ xhost +
 
-docker run -v local_foler/:/place_in_the_container -it --rm wukong_docker bash
+Navigate to repository home directory.
+> $ cd Wukong2024
 
+Build Docker image from Dockerfile in current working directory (.).
+> $ docker build -t wukong_docker .
+
+Open the Docker container. \
+`-v ./:/{directory-name-in-container}` maps current working directory (.) to /{directory-name-in-container} in the Docker container. \
+`--network=host -e DISPLAY=$DISPLAY --privileged` enables use of host display to spawn GUI windows.
+> $ docker run -v ./:/{directory-name-in-container} -it --network=host -e DISPLAY=$DISPLAY --privileged --rm wukong_docker bash
+
+Build the code.
+> $ cd {directory-name-in-container} \
+> $ ./build.sh
+
+### More Info
 Author: [Yue Li](https://liyuesolo.github.io/)
 
-My dear CRL members please add your contribution!
+My dear CRL members please add your contribution! :heart:
