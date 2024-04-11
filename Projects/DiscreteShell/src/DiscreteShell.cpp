@@ -206,16 +206,14 @@ void DiscreteShell::computeLinearModes(MatrixXT& eigen_vectors, VectorXT& eigen_
     Spectra::SparseSymShiftSolve<T, Eigen::Lower> op(K);
     
     T shift = -1e-4;
-    Spectra::SymEigsShiftSolver<T, 
-    Spectra::LARGEST_MAGN, 
-    Spectra::SparseSymShiftSolve<T, Eigen::Lower> > 
-        eigs(&op, nmodes, 2 * nmodes, shift);
+    Spectra::SymEigsShiftSolver<Spectra::SparseSymShiftSolve<T, Eigen::Lower>> 
+            eigs(op, nmodes, 2 * nmodes, shift);
 
     eigs.init();
 
-    int nconv = eigs.compute();
+    int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
 
-    if (eigs.info() == Spectra::SUCCESSFUL)
+    if (eigs.info() == Spectra::CompInfo::Successful)
     {
         eigen_vectors = eigs.eigenvectors().real();
         eigen_values = eigs.eigenvalues().real();

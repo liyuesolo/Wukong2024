@@ -1,5 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 add_definitions(-w)
+
+if (APPLE)
+  message(STATUS "Switch to homebrew clang for openmp")
+  set(CMAKE_C_COMPILER "/opt/homebrew/opt/llvm/bin/clang")
+  set(CMAKE_CXX_COMPILER "/opt/homebrew/opt/llvm/bin/clang++")
+endif()
+
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
   message( FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there. You may need to remove CMakeCache.txt." )
 endif()
@@ -37,15 +44,13 @@ igl_include(predicates)
 
 find_package(CGAL REQUIRED COMPONENTS Core)
 
-set(SuiteSparse_ROOT ${CMAKE_SOURCE_DIR}/../SuiteSparse-5.12.0)
-include_directories(${SuiteSparse_ROOT}/include)
-
-add_definitions(-DEIGEN_USE_MKL_ALL)
-add_definitions(-DMKL_LP64)
-
+if (NOT APPLE)
+  add_definitions(-DEIGEN_USE_MKL_ALL)
+  add_definitions(-DMKL_LP64)
+  include_directories(${MKLROOT}/include)
+endif()
 
 include_directories(${CMAKE_SOURCE_DIR})
-include_directories(${MKLROOT}/include)
 
 
 add_subdirectory(Libs)

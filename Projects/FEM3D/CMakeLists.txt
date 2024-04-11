@@ -1,12 +1,16 @@
-set(DEPS boost_filesystem tbb 
-    tbbmalloc tbbmalloc_proxy 
-    mkl_intel_lp64 
-    mkl_sequential mkl_core 
-    igl::core
-    suitesparseconfig metis cholmod amd camd ccolamd colamd spqr
-    gmp mpfr
-    )
-
+if (APPLE)
+    set(DEPS  
+        igl::core
+        )
+else()
+    set(DEPS boost_filesystem tbb 
+        tbbmalloc tbbmalloc_proxy 
+        mkl_intel_lp64 igl::core
+        mkl_sequential mkl_core 
+        suitesparseconfig metis cholmod amd camd ccolamd colamd spqr
+        gmp mpfr
+        )
+endif()
 
 include(FetchContent)
 FetchContent_Declare(
@@ -23,5 +27,9 @@ file(GLOB SOURCES "src/*.cpp" "autodiff/*.cpp")
 
 add_executable(FEM3D ${HEADERS} ${SOURCES})
 
-target_include_directories(FEM3D PUBLIC ../../Libs/spectra/include)
+# target_include_directories(FEM3D PUBLIC ../../Libs/spectra/include)
 target_link_libraries(FEM3D ${DEPS} polyscope ipc::toolkit)
+
+find_package(CHOLMOD REQUIRED)
+include_directories(${CHOLMOD_INCLUDES})
+target_link_libraries(FEM3D ${CHOLMOD_LIBRARIES})
