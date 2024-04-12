@@ -45,6 +45,7 @@ RUN apt-get install -f --fix-broken -y --no-install-recommends \
     libblas-dev liblapack-dev \
     xorg-dev libglu1-mesa-dev \
     libglu1-mesa-dev freeglut3-dev mesa-common-dev \
+    libgmsh-dev gmsh\
     libfmt-dev libglm-dev libopenblas-dev liblapack-dev liblapack3 libopenblas-base \
  && apt-get clean
 

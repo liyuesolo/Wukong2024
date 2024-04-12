@@ -26,9 +26,7 @@ target_include_directories(clipper PUBLIC clipper/clipper.h)
 target_link_libraries(clipper ${DEPS})
 set(DEPS ${DEPS} clipper)
 
-# target_link_libraries(IsohedralTiling ${DEPS} polyscope)
-# find_package(TBB REQUIRED)
-# target_link_libraries(IsohedralTiling TBB::tbb)
+target_link_libraries(IsohedralTiling ${DEPS} polyscope)
 
 find_package(Gmsh REQUIRED)
 include_directories(${GMSH_INC})
