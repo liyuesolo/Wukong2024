@@ -6,26 +6,25 @@ Ideally basic simulation models such as,
 -DiscreteShell, FEM2D/3D, EoLRods-
 should have only the basic implementation such that they can be inherited whenever needed. 
 
-### Set up WuKong using Docker and VSCode
+### Docker
 
 Enable Docker to connect to host display to spawn GUI windows.
 > $ xhost +
 
-Navigate to repository home directory.
-> $ cd Wukong2024
+### Set up WuKong using Docker and VSCode
 
-Install Docker, Dev Containers extension in VSCode
+Open the repository folder in VSCode. Install Docker and Dev Containers extensions in VSCode.
 
-Open VSCode type `control + p`, then type `>Reopen in Container`. This option will show up in the >< tab in the bottom left corner of vscode
+In VSCode, type `control + p`, then type `>Reopen in Container` (with the '>'). This option will show up in the >< tab in the bottom left corner of vscode.
 
-The above command will open a dev container using the docker file we provided.
+The above command will open a dev container using the Dockerfile we provided.
 
-In this container, install C++ Extension Pack for dev container.
-
-There you go!
-
+There you go! :100:
 
 ### Set up WuKong using just Docker 
+
+Navigate to repository home directory.
+> $ cd Wukong2024
 
 Build Docker image from Dockerfile in the .devcontainer directory (.).
 > $ docker build -t wukong_docker .
