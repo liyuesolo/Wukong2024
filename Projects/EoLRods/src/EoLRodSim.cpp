@@ -601,15 +601,18 @@ void EoLRodSim::computeSmallestEigenVector(const StiffnessMatrix& K,
     Eigen::Ref<VectorXT> eigen_vector)
 {
     int nmodes = 2;
-    Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(K);
+    Spectra::SparseSymShiftSolve<T, Eigen::Lower> op(K);
 
-    double shift = -1e-1;
-    Spectra::SymEigsShiftSolver<T, Spectra::LARGEST_MAGN, Spectra::SparseSymShiftSolve<T, Eigen::Upper> > eigs(&op, nmodes, 20, shift);
+    T shift = -1e-1;
+    
+    Spectra::SymEigsShiftSolver<Spectra::SparseSymShiftSolve<T, Eigen::Lower>> 
+            eigs(op, nmodes, 2 * nmodes, shift);
+
     eigs.init();
 
     int nconv = eigs.compute();
 
-    if (eigs.info() == Spectra::SUCCESSFUL)
+    if (eigs.info() == Spectra::CompInfo::Successful)
     {
         Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
         // Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
@@ -647,15 +650,16 @@ void EoLRodSim::checkHessianPD(const VectorXT& dq)
     // Eigen::SimplicialLLT<StiffnessMatrix> solver;
     // solver.compute(K);
 
-    Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(K);
+    Spectra::SparseSymShiftSolve<T, Eigen::Lower> op(K);
 
     double shift = -1e-1;
-    Spectra::SymEigsShiftSolver<T, Spectra::LARGEST_MAGN, Spectra::SparseSymShiftSolve<T, Eigen::Upper> > eigs(&op, nmodes, 2 * nmodes, shift);
+    Spectra::SymEigsShiftSolver<Spectra::SparseSymShiftSolve<T, Eigen::Lower>> 
+            eigs(op, nmodes, 2 * nmodes, shift);
     eigs.init();
 
     int nconv = eigs.compute();
 
-    if (eigs.info() == Spectra::SUCCESSFUL)
+    if (eigs.info() == Spectra::CompInfo::Successful)
     {
         Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
         Eigen::VectorXd eigen_values = eigs.eigenvalues().real();

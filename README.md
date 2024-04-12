@@ -57,6 +57,12 @@ Build the code.
 Building this docker image can take a while, for downloading MKL libraries and compiling SuiteSparse from the source code (just to remove a single print). 
 In case you have a powerful workstation, considering changing all the `make -j8` to `make -j128`.
 
+### Projects Tested Compiling
+- Discrete Shell [x] Linux [] MacOs
+- FEM3D  [x] Linux [] MacOs
+- EoLRods  [x] Linux [] MacOs
+- Isohedral Tiling  [x] Linux [] MacOs
+
 ### Coding Convention
 
 ### Naming Convention
@@ -75,7 +81,7 @@ In case you have a powerful workstation, considering changing all the `make -j8`
 - [ ] IPC contact examples
 
 ### More Info
-Authors: [Yue Li](https://liyuesolo.github.io/) ...
+Authors: [Yue Li](https://liyuesolo.github.io/), Logan Numerow, Peiyuan Xie ...
 
 
-My dear CRL members please add your contribution! :heart:
+My dear CRL members please add your names if you contribute to the development of this codebase! :heart:
