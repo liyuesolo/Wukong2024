@@ -6,14 +6,31 @@ Ideally basic simulation models such as,
 -DiscreteShell, FEM2D/3D, EoLRods-
 should have only the basic implementation such that they can be inherited whenever needed. 
 
+## Instructions for Windows
+
+Install WSL2 from Powershell or Command Prompt:
+> $ wsl --install
+
+From the WSL terminal, clone the repository:
+> $ git clone https://github.com/liyuesolo/Wukong2024 --recurse-submodules
+
+Navigate to the repository folder:
+> $ cd Wukong2024
+
+Open in VSCode:
+> $ code .
+
+Rename .devcontiner/devcontainer_windows.json to .devcontainer/devcontainer.json, replacing the existing one. Follow the instructions for _Run Docker in VSCode_.
+
+Give WSL access to the internet for building the docker image. Run the following to open a file editor and replace the existing IP address with 8.8.8.8
+> $ sudo nano /etc/resolv.conf
+
 ## Docker
 
 Download the docker image. Change tag "linux" if needed.
 > $ docker pull wukongsim/wukong:linux
 
 If you wish to build the docker image from scratch from the Dockerfile (not recommended) or rebuild after modifying the dockerfile, run the following in the command line from the directory Wukong2024/.devcontainer.
-
-LOGAN: Can we download cache layers using `docker pull` so that we can modify Dockerfile without building from scratch?
 > $ docker build -t wukongsim/wukong:linux .
 
 If finished modifying the Dockerfile, push to dockerhub.
@@ -68,7 +85,6 @@ Build the code.
 > $ cd {directory-name-in-container}
 
 > $ ./build.sh
-
 
 ### Docker Image Building Time
 Building this docker image can take a while, for downloading MKL libraries and compiling SuiteSparse from the source code (just to remove a single print). 
