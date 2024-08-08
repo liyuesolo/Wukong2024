@@ -4,6 +4,7 @@
 #include <igl/edges.h>
 #include <igl/boundary_facets.h>
 #include <igl/copyleft/tetgen/tetrahedralize.h>
+#include <igl/massmatrix.h>
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
 #include <Spectra/SymEigsSolver.h>
@@ -11,6 +12,36 @@
 
 #include "../autodiff/FEMEnergy.h"
 #include "../include/IMLSContact.h"
+
+bool IMLSContact::advanceOneTimeStep()
+{
+    int iter = 0;
+    while (true)
+    {
+        VectorXT residual = f;
+        T residual_norm = computeResidual(residual);
+        // residual_norms.push_back(residual_norm);
+        if (verbose)
+            std::cout << "[NEWTON] iter " << iter << "/" 
+                << max_newton_iter << ": residual_norm " 
+                << residual_norm << " tol: " << newton_tol << std::endl;
+        if (residual_norm < newton_tol || iter == max_newton_iter)
+        {
+            std::cout << "[NEWTON] iter " << iter << "/" 
+                << max_newton_iter << ": residual_norm " 
+                << residual_norm << " tol: " << newton_tol << std::endl;
+            break;
+        }
+        T du_norm = 1e10;
+        du_norm = lineSearchNewton(residual);
+        if (du_norm < 1e-10)
+            break;
+        iter ++;
+        
+    }
+
+    return true;
+}
 
 
 void IMLSContact::graphColoring(const MatrixXT& V, const MatrixXi& TT) 
@@ -64,30 +95,38 @@ void IMLSContact::graphColoring(const MatrixXT& V, const MatrixXi& TT)
 
 
 }
+
 bool IMLSContact::advanceOneStep(int step)
 {
-    std::cout << "===================STEP " << step << "===================" << std::endl;
-    VectorXT residual;
-    residual.resize(deformed.rows());
-    residual.setZero();
-    T residual_norm = computeResidual(residual);
-    residual_norms.push_back(residual_norm);
-    std::cout << "[NEWTON] iter " << step << "/" 
-        << max_newton_iter << ": residual_norm " 
-        << residual_norm << " tol: " << newton_tol << std::endl;
-    updateSurfaceVertices();
-    if (residual_norm < newton_tol || step == max_newton_iter)
+    if (dynamics)
     {
-        return true;
+        std::cout << "=================== Time STEP " << step * dt << "s===================" << std::endl;
+        bool finished = advanceOneTimeStep();
+        updateDynamicStates();
+        updateSurfaceVertices();
+        if (step * dt > simulation_duration)
+            return true;
+        return false;
     }
-
-    T du_norm = 1e10;
-    
-    if (use_VBD)
-        vertexBlockDescent(residual);
     else
+    {
+        std::cout << "===================STEP " << step << "===================" << std::endl;
+        VectorXT residual = f;
+        T residual_norm = computeResidual(residual);
+        residual_norms.push_back(residual_norm);
+        std::cout << "[NEWTON] iter " << step << "/" 
+            << max_newton_iter << ": residual_norm " 
+            << residual_norm << " tol: " << newton_tol << std::endl;
+        updateSurfaceVertices();
+        if (residual_norm < newton_tol || step == max_newton_iter)
+        {
+            return true;
+        }
+
+        T du_norm = 1e10;
         du_norm = lineSearchNewton(residual);
-    return false;
+        return false;
+    }
 }
 
 bool IMLSContact::linearSolve(StiffnessMatrix& K, const VectorXT& residual, VectorXT& du)
@@ -200,6 +239,8 @@ T IMLSContact::computeTotalEnergy()
         T ipc_term = addIPCEnergy();
         energy += ipc_term;
     }
+    if (dynamics)
+        addInertialEnergy(energy);
 
     energy -= f.dot(u);
     return energy;
@@ -213,6 +254,8 @@ T IMLSContact::computeResidual(VectorXT& residual)
         addCubicPlaneForceEntry(residual, w_plane);
     if (use_ipc)
         addIPCForceEntries(residual);
+    if (dynamics)
+        addInertialForceEntry(residual);
     residual += f;
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
@@ -266,6 +309,8 @@ void IMLSContact::buildSystemMatrix(StiffnessMatrix& K)
         addCubicPlaneHessianEntry(entries, w_plane);
     if (use_ipc)
         addIPCHessianEntries(entries);
+    if (dynamics)
+        addInertialHessianEntries(entries);
     int n_dof = deformed.rows();
     K.resize(n_dof, n_dof);
     K.setFromTriplets(entries.begin(), entries.end());
@@ -419,18 +464,17 @@ T IMLSContact::lineSearchNewton(const VectorXT& residual)
     {
         u = u_current + alpha * du;
         T E1 = computeTotalEnergy();
-        std::cout << "E0: " << E0 << " E1 " << E1 << std::endl;
         if (E1 - E0 < 0 || cnt > 10)
         {
             if (cnt > 10)
-                std::cout << "cnt > 10" << std::endl;
+                std::cout << "cnt > 10" << " |du| " << norm << " |g| " << residual.norm() << std::endl;
             break;
         }
         alpha *= 0.5;
         cnt += 1;
     }
 
-    return du.norm();
+    return alpha * du.norm();
 }
 
 void IMLSContact::initializeFromFile(const std::string& filename)
@@ -484,17 +528,17 @@ void IMLSContact::initializeFromFile(const std::string& filename)
     T bb_diag = (max_corner - min_corner).norm();
     T scale = 1.0 / bb_diag;
     
-    for (int i = 0; i < V.rows(); i++)
-    {
-        V.row(i) -= center;
-    }
-    V *= scale;
+    // for (int i = 0; i < V.rows(); i++)
+    // {
+    //     V.row(i) -= center;
+    // }
+    // V *= scale;
 
-    for (int i = 0; i < Vtet.rows(); i++)
-    {
-        Vtet.row(i) -= center;
-    }
-    Vtet *= scale;
+    // for (int i = 0; i < Vtet.rows(); i++)
+    // {
+    //     Vtet.row(i) -= center;
+    // }
+    // Vtet *= scale;
 
     
     num_nodes = Vtet.rows();
@@ -598,7 +642,7 @@ void IMLSContact::initializeSingleKnot()
     f = u; 
     for (int i = 0; i < num_nodes; i++)
     {
-        f[i*3+1] = -0.01;
+        f[i*3+1] = -0.0001;
     }
 
     TV min_corner = V.colwise().minCoeff();
@@ -607,6 +651,18 @@ void IMLSContact::initializeSingleKnot()
 
     T bb_diag = (max_corner - min_corner).norm();
     T scale = 1.0 / bb_diag;
+    
+    for (int i = 0; i < V.rows(); i++)
+    {
+        V.row(i) -= center;
+    }
+    V *= scale;
+
+    for (int i = 0; i < Vtet.rows(); i++)
+    {
+        Vtet.row(i) -= center;
+    }
+    Vtet *= scale;
     
     num_ele = Ttet.rows();
     indices.resize(num_ele * 4);
@@ -639,8 +695,16 @@ void IMLSContact::initializeSingleKnot()
     // std::cout << colors.maxCoeff() + 1 << std::endl;
     max_newton_iter = 300000;
 
-    E = 1e5;
 
+    dynamics = true;
+    E = 1e3;
+    dt = 0.1;
+    simulation_duration = 1000000;
+
+    if (dynamics)
+    {
+        initializeDynamicStates();
+    }
 }
 
 T IMLSContact::computeGi(int vtx_idx)
@@ -855,3 +919,65 @@ void IMLSContact::addElasticHessianEntries(std::vector<Entry>& entries)
         addHessianEntry<3, 3>(entries, indices, hessian);
     });
 }
+
+// ============================= Dynamics =============================
+void IMLSContact::addInertialEnergy(T& energy)
+{
+    T kinetic_energy = 0.0;
+    for (int i = 0; i < deformed.rows() / 3; i++)
+    {
+        TV x_n_plus_1 = deformed.segment<3>(i * 3);
+        kinetic_energy += (density * mass_diagonal[i] * (x_n_plus_1.dot(x_n_plus_1)
+                                                - 2.0 * x_n_plus_1.dot(xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
+                                                )) / (2.0 * std::pow(dt, 2));
+        //std::cout<<i<<" kinetic_energy "<<x_n_plus_1-xn.segment<3>(i * 3)<<std::endl;                    
+    }
+    energy += kinetic_energy;
+}
+
+void IMLSContact::addInertialForceEntry(VectorXT& residual)
+{
+    for (int i = 0; i < deformed.rows() / 3; i++)
+    {
+        TV x_n_plus_1 = deformed.segment<3>(i * 3);
+        residual.segment<3>(i * 3) -= (density * mass_diagonal[i] * (2.0 * x_n_plus_1
+                                                - 2.0 * (xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
+                                                )) / (2.0 * std::pow(dt, 2));
+    }
+}
+
+void IMLSContact::addInertialHessianEntries(std::vector<Entry>& entries)
+{
+    for (int i = 0; i < deformed.rows() / 3; i++)
+    {
+        TM hess = density * TM::Identity() * mass_diagonal[i] / std::pow(dt, 2);
+        addHessianEntry<3, 3>(entries, {i}, hess);
+    }
+}
+
+void IMLSContact::updateDynamicStates()
+{
+    vn = (deformed - xn) / dt;
+    xn = deformed;
+}
+
+void IMLSContact::initializeDynamicStates()
+{
+
+    computeMassMatrix();
+    xn = undeformed;
+    vn = VectorXT::Zero(undeformed.rows());
+}
+
+void IMLSContact::computeMassMatrix()
+{
+    MatrixXT V; MatrixXi F;
+    vectorToIGLMatrix<T, 3>(undeformed, V);
+    vectorToIGLMatrix<int, 4>(indices, F);
+    igl::massmatrix(V, F, igl::MASSMATRIX_TYPE_BARYCENTRIC, M);
+    mass_diagonal.resize(deformed.rows() / 3);
+    mass_diagonal.setZero();
+    mass_diagonal = M.diagonal(); 
+}
+// ============================= Dynamics End =============================
+

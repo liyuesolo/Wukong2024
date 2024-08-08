@@ -41,10 +41,15 @@ public:
     using Edge = Vector<int, 2>;
     using EleNodes = Matrix<T, 4, 3>;
     using EleIdx = Vector<int, 4>;
+    using FaceVtx = Matrix<T, 3, 3>;
+    using FaceIdx = Vector<int, 3>;
 
 public:
-    T E = 1e4;
-    T nu = 0.48;
+    // material parameter setup1
+    T density = 1.5e3;  //Cotton kg/m^3
+    TV gravity = TV(0.0, -9.8, 0.0);    
+    T E = 1e6;
+    T nu = 0.45;
 
     T lambda, mu;
 
@@ -87,6 +92,14 @@ public:
     T ipc_min_dis = 1.0;
     T max_barrier_weight = 1e8;
     ipc::CollisionMesh collision_mesh;
+
+    bool dynamics = false;
+    T dt = 0.01;
+    T simulation_duration = 10;
+    StiffnessMatrix M;
+    VectorXT mass_diagonal;
+    VectorXT xn;
+    VectorXT vn;
 
 private:
     template <class OP>
@@ -232,6 +245,7 @@ private:
 
 public:
     bool advanceOneStep(int step);
+    bool advanceOneTimeStep();
     bool linearSolve(StiffnessMatrix& K, const VectorXT& residual, VectorXT& du);
     T computeTotalEnergy();
     T computeResidual(VectorXT& residual);
@@ -252,6 +266,15 @@ public:
     void computeBoundingBox(TV& min_corner, TV& max_corner);
     void updateSurfaceVertices();
 
+    // virtual function for different time integration schemes
+    //                      different ways of computing the mass matrix
+    virtual void addInertialEnergy(T& energy);
+    virtual void addInertialForceEntry(VectorXT& residual);
+    virtual void addInertialHessianEntries(std::vector<Entry>& entries);
+    virtual void updateDynamicStates();
+    virtual void initializeDynamicStates();
+    virtual void computeMassMatrix();
+
     T computeInversionFreeStepsize();
 
     T computeVolume(const EleNodes& x_undeformed);
@@ -268,6 +291,7 @@ public:
     //DerivativeTest.cpp
     void checkTotalGradient(bool perturb);
     void checkTotalGradientScale(bool perturb);
+    void checkTotalHessianScale(bool perturb);
 
     // IPC.cpp
     void buildIPCRestData();

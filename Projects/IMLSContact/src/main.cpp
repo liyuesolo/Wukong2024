@@ -8,6 +8,7 @@ int main()
 {
     IMLSContact simulation;
     simulation.initializeSingleKnot();
+    simulation.checkTotalHessianScale(true);
     App<IMLSContact> app(simulation);
     app.initializeScene();
     app.run();

@@ -90,50 +90,53 @@ void IMLSContact::checkTotalGradientScale(bool perturb)
     run_diff_test = false;
 }
 
-// void VertexModel::checkTotalHessianScale(bool perturb)
-// {
-//     run_diff_test = true;
-//     std::cout << "===================== check Hessian 2nd Scale =====================" << std::endl;
+void IMLSContact::checkTotalHessianScale(bool perturb)
+{
+    run_diff_test = true;
+    std::cout << "===================== check Hessian 2nd Scale =====================" << std::endl;
 
-//     VectorXT du(num_nodes * 3);
-//     du.setRandom();
-//     du *= 1.0 / du.norm();
-//     du *= 0.001;
-//     if (perturb)
-//         u += du;
+    VectorXT du(num_nodes * 3);
+    du.setRandom();
+    du *= 1.0 / du.norm();
+    du *= 0.001;
+    if (perturb)
+        u += du;
     
-//     int n_dof = num_nodes * 3;
+    int n_dof = num_nodes * 3;
 
-//     StiffnessMatrix A;
+    StiffnessMatrix A;
     
-//     buildSystemMatrix(A);
+    buildSystemMatrix(A);
 
-//     std::cout << "build matrix" << std::endl;
-//     VectorXT f0(n_dof);
-//     f0.setZero();
-//     computeResidual(u, f0);
-//     f0 *= -1;
+    std::cout << "build matrix" << std::endl;
+    VectorXT f0(n_dof);
+    f0.setZero();
+    computeResidual(f0);
+    f0 *= -1;
     
-//     VectorXT dx(n_dof);
-//     dx.setRandom();
-//     dx *= 1.0 / dx.norm();
-//     for(int i = 0; i < n_dof; i++) dx[i] += 0.5;
-//     dx *= 0.001;
-//     T previous = 0.0;
-//     for (int i = 0; i < 10; i++)
-//     {
-//         VectorXT f1(n_dof);
-//         f1.setZero();
-//         computeResidual(u + dx, f1);
-//         f1 *= -1;
-//         T df_norm = (f0 + (A * dx) - f1).norm();
-//         // std::cout << "df_norm " << df_norm << std::endl;
-//         if (i > 0)
-//         {
-//             std::cout << (previous/df_norm) << std::endl;
-//         }
-//         previous = df_norm;
-//         dx *= 0.5;
-//     }
-//     run_diff_test = false;
-// }
+    VectorXT dx(n_dof);
+    dx.setRandom();
+    dx *= 1.0 / dx.norm();
+    for(int i = 0; i < n_dof; i++) dx[i] += 0.5;
+    dx *= 0.001;
+    T previous = 0.0;
+    VectorXT u_current = u;
+    for (int i = 0; i < 10; i++)
+    {
+        VectorXT f1(n_dof);
+        f1.setZero();
+        u = u_current+dx;
+        computeResidual(f1);
+        f1 *= -1;
+        T df_norm = (f0 + (A * dx) - f1).norm();
+        // std::cout << "df_norm " << df_norm << std::endl;
+        if (i > 0)
+        {
+            std::cout << (previous/df_norm) << std::endl;
+        }
+        previous = df_norm;
+        dx *= 0.5;
+        u = u_current;
+    }
+    run_diff_test = false;
+}

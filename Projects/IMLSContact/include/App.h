@@ -55,6 +55,11 @@ public:
         {
             
         }
+        if (ImGui::Checkbox("Dynamics", &simulation.dynamics)) 
+        {
+            if (simulation.dynamics)
+                simulation.initializeDynamicStates();   
+        }
         if (ImGui::Button("Animate Modes")) 
         {
             animate_modes = true;
