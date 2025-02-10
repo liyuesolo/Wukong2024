@@ -12,4 +12,8 @@ void computeStableNeoHookeanEnergy(double E, double nu, const Eigen::Matrix<doub
 void computeStableNeoHookeanEnergyGradient(double E, double nu, const Eigen::Matrix<double,4,3> & x, const Eigen::Matrix<double,4,3> & X, Eigen::Matrix<double, 12, 1>& energygradient);
 void computeStableNeoHookeanEnergyHessian(double E, double nu, const Eigen::Matrix<double,4,3> & x, const Eigen::Matrix<double,4,3> & X, Eigen::Matrix<double, 12, 12>& energyhessian);
 
+
+void computeLinearTet3DStVKEnergy(double E, double nu, const Eigen::Matrix<double,4,3> & x, const Eigen::Matrix<double,4,3> & X, double& energy);
+void computeLinearTet3DStVKEnergyGradient(double E, double nu, const Eigen::Matrix<double,4,3> & x, const Eigen::Matrix<double,4,3> & X, Eigen::Matrix<double, 12, 1>& energygradient);
+void computeLinearTet3DStVKEnergyHessian(double E, double nu, const Eigen::Matrix<double,4,3> & x, const Eigen::Matrix<double,4,3> & X, Eigen::Matrix<double, 12, 12>& energyhessian);
 #endif

@@ -194,11 +194,11 @@ T FEM3D::computeTotalEnergy()
         T cubic_term = addCubicPlaneEnergy(w_plane);
         energy += cubic_term;
     }
-    if (use_ipc)
-    {
-        T ipc_term = addIPCEnergy();
-        energy += ipc_term;
-    }
+    // if (use_ipc)
+    // {
+    //     T ipc_term = addIPCEnergy();
+    //     energy += ipc_term;
+    // }
 
     energy -= f.dot(u);
     return energy;
@@ -210,8 +210,8 @@ T FEM3D::computeResidual(VectorXT& residual)
     addElasticForceEntries(residual);
     if (add_cubic_plane)
         addCubicPlaneForceEntry(residual, w_plane);
-    if (use_ipc)
-        addIPCForceEntries(residual);
+    // if (use_ipc)
+    //     addIPCForceEntries(residual);
     residual += f;
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
@@ -263,8 +263,8 @@ void FEM3D::buildSystemMatrix(StiffnessMatrix& K)
 
     if (add_cubic_plane)
         addCubicPlaneHessianEntry(entries, w_plane);
-    if (use_ipc)
-        addIPCHessianEntries(entries);
+    // if (use_ipc)
+    //     addIPCHessianEntries(entries);
     int n_dof = deformed.rows();
     K.resize(n_dof, n_dof);
     K.setFromTriplets(entries.begin(), entries.end());
@@ -507,7 +507,7 @@ void FEM3D::initializeFromFile(const std::string& filename)
     f = u; 
     for (int i = 0; i < num_nodes; i++)
     {
-        f[i*3+1] = -0.01;
+        f[i*3+1] = -9.8;
     }
     
     num_ele = Ttet.rows();
@@ -540,7 +540,7 @@ void FEM3D::initializeFromFile(const std::string& filename)
     // std::cout << colors.maxCoeff() + 1 << std::endl;
     max_newton_iter = 300000;
 
-    E = 1e3;
+    E = 5e6;
 }
 T FEM3D::computeGi(int vtx_idx)
 {
@@ -712,7 +712,7 @@ T FEM3D::addElastsicPotential()
     {
         T ei = 0.0;
         // computeLinearTet3DNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
-        computeStableNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
+        computeLinearTet3DStVKEnergy(E, nu, x_deformed, x_undeformed, ei);
         energies_neoHookean[tet_idx] += ei;
         // if (std::isnan(ei))
         // {
@@ -733,7 +733,7 @@ void FEM3D::addElasticForceEntries(VectorXT& residual)
         //     return;
         Vector<T, 12> dedx;
         // computeLinearTet3DNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
-        computeStableNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
+        computeLinearTet3DStVKEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
         addForceEntry<3>(residual, indices, -dedx);
         // std::cout << dedx.transpose() << std::endl;
     });
@@ -750,7 +750,7 @@ void FEM3D::addElasticHessianEntries(std::vector<Entry>& entries)
         //     return;
         Matrix<T, 12, 12> hessian, hessian_ad;
         // computeLinearTet3DNeoHookeanEnergyHessian(E, nu, x_deformed, x_undeformed, hessian);
-        computeStableNeoHookeanEnergyHessian(E, nu, x_deformed, x_undeformed, hessian);
+        computeLinearTet3DStVKEnergyHessian(E, nu, x_deformed, x_undeformed, hessian);
         addHessianEntry<3, 3>(entries, indices, hessian);
     });
 }

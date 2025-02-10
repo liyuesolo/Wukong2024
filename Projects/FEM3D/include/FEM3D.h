@@ -13,7 +13,7 @@
 #include <unordered_set>
 #include <complex>
 #include <iomanip>
-#include <ipc/ipc.hpp>
+// #include <ipc/ipc.hpp>
 
 #include "VecMatDef.h"
 #include "Timer.h"
@@ -86,7 +86,7 @@ public:
     T ipc_barrier_weight = 1e3;
     T ipc_min_dis = 1.0;
     T max_barrier_weight = 1e8;
-    ipc::CollisionMesh collision_mesh;
+    // ipc::CollisionMesh collision_mesh;
 
 private:
     template <class OP>
@@ -269,13 +269,13 @@ public:
     void checkTotalGradientScale(bool perturb);
 
     // IPC.cpp
-    void buildIPCRestData();
-    T addIPCEnergy();
-    void addIPCForceEntries(VectorXT& residual);
-    void addIPCHessianEntries(std::vector<Entry>& entries);
-    void updateIPCVertices();
-    T computeCollisionFreeStepsize(const VectorXT& du);
-    void updateBarrierInfo(bool first_step);
+    // void buildIPCRestData();
+    // T addIPCEnergy();
+    // void addIPCForceEntries(VectorXT& residual);
+    // void addIPCHessianEntries(std::vector<Entry>& entries);
+    // void updateIPCVertices();
+    // T computeCollisionFreeStepsize(const VectorXT& du);
+    // void updateBarrierInfo(bool first_step);
 public:
     FEM3D() {}
     ~FEM3D() {}

@@ -7,7 +7,7 @@
 int main()
 {
     FEM3D simulation;
-    simulation.initializeFromFile("../Projects/FEM3D/data/beam.msh");
+    simulation.initializeFromFile("../../../Projects/FEM3D/data/beam.msh");
     App<FEM3D> app(simulation);
     app.initializeScene();
     app.run();

@@ -9,14 +9,10 @@ project(WuKong2024 CXX)
 
 message(STATUS "${CMAKE_BUILD_TYPE} Build")
 
-
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMake)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS "ON")
 set(CMAKE_CXX_STANDARD 17)
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -O0 -fopenmp")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O0 -fopenmp -Wno-unused-variable -Wno-unused-but-set-variable -Wsign-compare -Wreorder")
 
 
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)
@@ -34,9 +30,8 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O0 -fopenmp -Wno-unused-variable -Wno-unused-but-set-variable -Wsign-compare -Wreorder")
 endif()
 
-
-add_subdirectory("Deps/polyscope")
 add_subdirectory("Deps/libigl")
+add_subdirectory("Deps/polyscope")
 
 include(libigl)
 igl_include(predicates)

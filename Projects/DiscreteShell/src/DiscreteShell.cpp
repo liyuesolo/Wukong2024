@@ -348,9 +348,9 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
     buildHingeStructure();
     dynamics = true;
     add_gravity = true;
-    use_consistent_mass_matrix = true;
+    use_consistent_mass_matrix = false;
     // E = 0.0;
-    dt = 1e-2;
+    dt = 1.0 / 30.0;
     simulation_duration = 1000000;
     
     hinge_stiffness.setConstant(10);
@@ -509,6 +509,70 @@ void DiscreteShell::addShellEnergy(T& energy)
 
 void DiscreteShell::addShellInplaneForceEntries(VectorXT& residual)
 {
+
+    
+
+    auto barycentricJacobian = [&](const Eigen::Vector3d &a, const Eigen::Vector3d &b, const Eigen::Vector3d &c)
+    {
+        Eigen::Vector3d v0 = b - a, v1 = c - a;
+        //Eigen::Vector3d v2 = p - a;
+        T d00 = v0.dot(v0); // (b - a).dot(b - a) => d d00 / d p = 0
+        T d01 = v0.dot(v1); // (b - a).dot(c - a) => d d01 / d p = 0
+        T d11 = v1.dot(v1); // (c - a).dot(c - a) => d d11 / dp = 0
+        //T d20 = v2.dot(v0); // (p - a).dot(b - a) => d d20 / dp = (b - a)^T
+        //T d21 = v2.dot(v1); //  ( p - a).dot(c - a) = > d21 / dp = (c - a)^T
+        T denom = d00 * d11 - d01 * d01; // => d00 * d11 constant in => drops out, d01 constant in p => derivative is 0
+        //v = (d11 * d20 - d01 * d21) / denom;
+        //w = (d00 * d21 - d01 * d20) / denom;
+        //u = 1.0f - v - w;
+        //Eigen::Vector3d dvdp = (d11 * dd20 / dp - d01 * d d21 / dp) / denom;
+        Eigen::Vector3d dvdp = (d11 * (b - a) - d01 * (c - a)) / denom;
+        Eigen::Vector3d dwdp = (d00 * (c - a) - d01 * (b - a)) / denom;
+        Matrix<T, 2, 3> result;
+        result.row(0) = dvdp.transpose();
+        result.row(1) = dwdp.transpose();
+        return result;
+    };
+
+    auto compute3DCSTDeformationGradient = [&](const Eigen::Vector3d &x1Undef, const Eigen::Vector3d &x2Undef, const Eigen::Vector3d &x3Undef,
+        const Eigen::Vector3d &x1, const Eigen::Vector3d &x2, const Eigen::Vector3d &x3
+    )
+    {
+        // defGrad = d x / d X
+        // X(b) = X * N(b) = X * [ 1 - b1 - b2; b1; b2];
+        // b(X) = [X2 - X1, X3 - X1]^-1 [X - X1]
+        // x(X) = x * N(b(X)) then take the jacobian of this to get defgrad
+        // d x / d X = x * d N / dX = x * dN/db * [X2 - X1, X3 - X1]^-1;
+        // however here X means a 2 dimensional vector! so we get a 3x2 defgrad
+        // x(X) = x * N(Barycentric(X, X1, X2, X3))
+        // defGrad = dx / d X = x * dN/dB * dB /dX
+        // that would work except that the defGradient is gonna be 3x3 and in the undef config. something like [1, 0, 0;0,0,0;0,0,1];
+        // and then E = 0.5 * (F^T F - I)  is gonna give a non zero energy in the undef config.
+        //instead we choose a 2D coordinate system X* in the undef configuration for which we compute the def grad
+        // defGrad = d x / d X*
+        // x(X*) = x * N(Barycentric(X(X*)));
+        // X(X*) = X1 + t * X*[0] + q *X*[1]
+
+        Eigen::Vector3d tUndef = (x2Undef - x1Undef).normalized();
+        Eigen::Vector3d e2Undef = (x3Undef - x1Undef);
+        Eigen::Vector3d qUndef = (e2Undef - tUndef * e2Undef.dot(tUndef)).normalized();
+
+        Eigen::Matrix3d x;
+        x << x1, x2, x3;
+
+        //N(b) = [1 - b1 - b2, b1, b2]
+        Matrix<T, 3, 2> dNdb;
+        dNdb << -1.0, -1.0,
+            1.0, 0.0,
+            0.0, 1.0;
+
+        Matrix<T, 2, 3> dBdX = barycentricJacobian(x1Undef, x2Undef, x3Undef);
+        Matrix<T, 3, 2> dXdXStar;
+        dXdXStar << tUndef, qUndef;
+        Matrix<T, 3, 2> defGrad = x * dNdb * dBdX * dXdXStar; //note that this F is not very intuitive it can contain -1 for undef configuration, but its not a problem as long as only F^T*F is used
+        return defGrad;
+    };
+
     iterateFaceSerial([&](int face_idx)
     {
         FaceVtx vertices = getFaceVtxDeformed(face_idx);
@@ -518,7 +582,8 @@ void DiscreteShell::addShellInplaneForceEntries(VectorXT& residual)
         T k_s = E * thickness / (1.0 - nu * nu);
         TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
-        
+    
+
         Vector<T, 9> dedx;
         compute3DCSTShellEnergyGradient(nu, k_s, x0, x1, x2, X0, X1, X2, dedx);
         
@@ -943,13 +1008,16 @@ void DiscreteShell::addInertialEnergy(T& energy)
     }
     else
     {
-        for (int i = 0; i < deformed.rows() / 3; i++)
-        {
-            TV x_n_plus_1 = deformed.segment<3>(i * 3);
-            kinetic_energy += (density * mass_diagonal[i] * (x_n_plus_1.dot(x_n_plus_1)
-                                                    - 2.0 * x_n_plus_1.dot(xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
-                                                    )) / (2.0 * std::pow(dt, 2));
-        }
+        VectorXT x_hat = deformed - xn - vn * dt;
+        VectorXT Mx_hat = density * mass_diagonal.array() * x_hat.array();
+        kinetic_energy += 0.5 * x_hat.dot(x_hat)  / dt / dt ;
+        // for (int i = 0; i < deformed.rows() / 3; i++)
+        // {
+        //     TV x_n_plus_1 = deformed.segment<3>(i * 3);
+        //     kinetic_energy += (density * mass_diagonal[i] * (x_n_plus_1.dot(x_n_plus_1)
+        //                                             - 2.0 * x_n_plus_1.dot(xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
+        //                                             )) / (2.0 * std::pow(dt, 2));
+        // }
     }
     
     energy += kinetic_energy;
@@ -979,13 +1047,16 @@ void DiscreteShell::addInertialForceEntry(VectorXT& residual)
     }
     else
     {
-        for (int i = 0; i < deformed.rows() / 3; i++)
-        {
-            TV x_n_plus_1 = deformed.segment<3>(i * 3);
-            residual.segment<3>(i * 3) -= (density * mass_diagonal[i] * (2.0 * x_n_plus_1
-                                                    - 2.0 * (xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
-                                                    )) / (2.0 * std::pow(dt, 2));
-        }
+        VectorXT x_hat = deformed - xn - vn * dt;
+        VectorXT Mx_hat = density * mass_diagonal.array() * x_hat.array();
+        residual -= x_hat / dt / dt;
+        // for (int i = 0; i < deformed.rows() / 3; i++)
+        // {
+        //     TV x_n_plus_1 = deformed.segment<3>(i * 3);
+        //     residual.segment<3>(i * 3) -= (density * mass_diagonal[i] * (2.0 * x_n_plus_1
+        //                                             - 2.0 * (xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
+        //                                             )) / (2.0 * std::pow(dt, 2));
+        // }
     }
 }
 
@@ -1007,7 +1078,8 @@ void DiscreteShell::addInertialHessianEntries(std::vector<Entry>& entries)
     {
         for (int i = 0; i < deformed.rows() / 3; i++)
         {
-            TM hess = density * TM::Identity() * mass_diagonal[i] / std::pow(dt, 2);
+            // TM hess = density * TM::Identity() * mass_diagonal[i] / std::pow(dt, 2);
+            TM hess = TM::Identity() / std::pow(dt, 2);
             addHessianEntry<3, 3>(entries, {i}, hess);
         }
     }

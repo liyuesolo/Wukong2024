@@ -51,10 +51,7 @@ public:
         {
             run_sim = true;
         }
-        if (ImGui::Checkbox("VBD", &simulation.use_VBD)) 
-        {
-            
-        }
+        
         if (ImGui::Button("Animate Modes")) 
         {
             animate_modes = true;
