@@ -51,7 +51,7 @@ public:
             }
             for (int i = 0; i < rod->indices.size()-1; i++)
             {
-                edges.push_back({global_cnt + i, global_cnt + i + 1});
+                edges.push_back({size_t(global_cnt + i), size_t(global_cnt + i + 1)});
             }
             global_cnt += rod->indices.size();
         }
