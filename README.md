@@ -91,10 +91,10 @@ Building this docker image can take a while, for downloading MKL libraries and c
 In case you have a powerful workstation, considering changing all the `make -j8` to `make -j128`.
 
 ### Projects Tested Compiling
-- Discrete Shell [x] Linux [] MacOs
-- FEM3D  [x] Linux [] MacOs
-- EoLRods  [x] Linux [] MacOs
-- Isohedral Tiling  [x] Linux [] MacOs
+- Discrete Shell [x] Linux [x] MacOs
+- FEM3D  [x] Linux [x] MacOs
+- EoLRods  [x] Linux [x] MacOs
+- Isohedral Tiling  [x] Linux [x] MacOs
 
 ### Coding Convention
 
