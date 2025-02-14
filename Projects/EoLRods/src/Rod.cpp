@@ -1,5 +1,5 @@
 #include "../include/Rod.h"
-
+#include "../include/Util.h"
 void Rod::setupBishopFrame()
 {
     // rest_tangents.resize(indices.size() - 1);

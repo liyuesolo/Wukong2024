@@ -34,6 +34,9 @@ public:
     void buildStraightRodScene(int sub_div);
     void buildGridScene(int sub_div);
     void buildFullScaleSquareScene(int sub_div);
+    void buildFullCircleScene(int sub_div);
+    void buildOneCrossScene(int sub_div);
+    void buildOneCrossSceneCurved(int sub_div);
 
 private:
 
@@ -60,6 +63,11 @@ private:
         const std::vector<int>& passing_points_id, 
         int sub_div,
         int& full_dof_cnt, int& node_cnt, int& rod_cnt);
+    
+    void addCurvedRod(const std::vector<TV2>& data_points,
+        const std::vector<TV>& passing_points, 
+        const std::vector<int>& passing_points_id, 
+        int sub_div, int& full_dof_cnt, int& node_cnt, int& rod_cnt, bool closed);
     
     void addPoint(const TV& point, int& full_dof_cnt, int& node_cnt);
 

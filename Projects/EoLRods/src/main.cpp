@@ -5,9 +5,11 @@ int main()
 {
     EoLRodSim sim;
     Scene scene(sim);
-    scene.buildFullScaleSquareScene(8);
+    // scene.buildInterlockingSquareScene(8);
+    // scene.buildFullScaleSquareScene(8);
+    scene.buildOneCrossScene(32);
     
-    App<EoLRodSim> app(sim);
+    App app(sim);
     app.initializeScene();
     app.run();
     return 0;

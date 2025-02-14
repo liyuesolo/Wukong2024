@@ -19,8 +19,8 @@ inline T signedAngle(const Eigen::Vector3d& u, const Eigen::Vector3d& v, const E
   return angle;
 }
 
-template<int dim>
-inline bool colinear(Vector<T, dim> a, Vector<T, dim> b)
+
+inline bool colinear(Eigen::Vector3d a, Eigen::Vector3d b)
 {
     if((a-b).norm()<1e-2)
 		return true;
@@ -47,6 +47,10 @@ Eigen::Matrix3d rotationMatrixFromEulerAngle(T angle_z, T angle_y, T angle_x);
 Eigen::Vector3d parallelTransport(const Eigen::Vector3d& u, const Eigen::Vector3d& t0, const Eigen::Vector3d& t1);
 Eigen::Vector3d parallelTransportOrthonormalVector(const Eigen::Vector3d& u, const Eigen::Vector3d& t0, const Eigen::Vector3d& t1);
 
+bool circleCircleIntersection(const Eigen::Vector3d& x0, T r0,
+  const Eigen::Vector3d& x1, T r1,
+  Eigen::Vector3d& ixn0,
+  Eigen::Vector3d& ixn1);
 
 
 #endif
