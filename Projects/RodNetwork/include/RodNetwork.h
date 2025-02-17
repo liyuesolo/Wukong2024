@@ -38,8 +38,8 @@ public:
 
 public:
 
-	T ROD_A = 2.5e-4;
-	T ROD_B = 2.5e-4;
+	T ROD_A = 2.5e-3;
+	T ROD_B = 2.5e-3;
 
 	VectorXT deformed_states;
     VectorXT rest_states;
@@ -89,14 +89,23 @@ private:
         }
     }
 	
+	template<int dim = 2>
+    void addForceEntry(VectorXT& residual, 
+        const std::vector<int>& vtx_idx, 
+        const VectorXT& gradent, int shift = 0)
+    {
+        for (int i = 0; i < vtx_idx.size(); i++)
+            residual.template segment<dim>(vtx_idx[i] * dim + shift) += gradent.template segment<dim>(i * dim);
+    }
 
 public:
 	RodNetwork() {} 
 	~RodNetwork() {} 
 
+	// ================ RodNetwork.cpp ==================
 	T computeTotalEnergy();
 
-    T computeResidual(Eigen::Ref<VectorXT> residual);
+    T computeResidual(VectorXT& residual);
     
     void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
     
@@ -110,10 +119,16 @@ public:
 
 	void computeBoundingBox(TV& bottom_left, TV& top_right);
 
-	// Stretching.cpp
+	void resetScene();
 
+	// ================== DerivativeTest.cpp ==================
+	void testGradientFD();
+	void testGradient2ndOrderTerm();
+    void testHessian2ndOrderTerm();
+
+	// ================== Stretching.cpp ==================
 	T addStretchingEnergy();
-	void addStretchingForce(Eigen::Ref<VectorXT> residual);
+	void addStretchingForce(VectorXT& residual);
 	void addStretchingHessian(std::vector<Entry>& entry_K);
 
 

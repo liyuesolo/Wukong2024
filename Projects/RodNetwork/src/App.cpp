@@ -26,12 +26,14 @@ void App::sceneCallback()
         }
         rod_network->updateNodePositions(nodes);
         rod_vertices->updatePointPositions(nodes);
-        std::cout << simulation.deformed_states.transpose() << std::endl;
+        
         
     }
     if (ImGui::Button("DerivativeTest")) 
     {
-        // simulation.checkTotalGradientScale(true);
+        simulation.testGradient2ndOrderTerm();
+        simulation.testHessian2ndOrderTerm();
+        // simulation.testGradientFD();
     }
     if (!animate_modes && run_sim)
     {
