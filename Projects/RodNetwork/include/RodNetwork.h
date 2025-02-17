@@ -50,12 +50,14 @@ public:
 	std::unordered_map<int, T> dirichlet_data;
 
 	bool add_stretching = true;
-
+	bool add_bending_and_twisting = true;
+	bool add_rigid_joint = true;
+	
 	bool verbose = false;
 	bool run_diff_test = false;
-	int max_newton_iter = 500;
+	int max_newton_iter = 2000;
     int ls_max = 12;
-	T newton_tol = 1e-5;
+	T newton_tol = 1e-6;
 
 private:
 	template <class OP>
@@ -85,6 +87,32 @@ private:
                                 dof_j * dim_col + l + shift_col, 
                                 hessian(i * dim_row + k, j * dim_col + l)
                             );                
+            }
+        }
+    }
+
+	template<int dim_row=2, int dim_col=2>
+    void addJacobianEntry(
+        std::vector<Entry>& triplets,
+        const std::vector<int>& vtx_idx,
+        const std::vector<int>& vtx_idx2, 
+        const MatrixXT& jacobian, 
+        int shift_row = 0, int shift_col=0)
+    {
+        
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            int dof_i = vtx_idx[i];
+            for (int j = 0; j < vtx_idx2.size(); j++)
+            {
+                int dof_j = vtx_idx2[j];
+                for (int k = 0; k < dim_row; k++)
+                    for (int l = 0; l < dim_col; l++)
+                        triplets.emplace_back(
+                                dof_i * dim_row + k + shift_row, 
+                                dof_j * dim_col + l + shift_col, 
+                                jacobian(i * dim_row + k, j * dim_col + l)
+                            ); 
             }
         }
     }
@@ -131,6 +159,15 @@ public:
 	void addStretchingForce(VectorXT& residual);
 	void addStretchingHessian(std::vector<Entry>& entry_K);
 
+	// ================== BendingAndTwisting.cpp ==================
+	T addBendingAndTwistingEnergy();
+	void addBendingAndTwistingForceEntries(VectorXT& residual);
+	void addBendingAndTwistingHessianEntries(std::vector<Entry>& entry_K);
+
+	// ================== Joint.cpp ==================
+	T addJointBendingAndTwistingEnergy();
+	void addJointBendingAndTwistingForceEntries(VectorXT& residual);
+	void addJointBendingAndTwistingHessianEntries(std::vector<Entry>& entry_K);
 
 	// initialize from file
 	void initializeFromFile(const std::string& filename);

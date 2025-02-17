@@ -23,7 +23,7 @@ void RodNetwork::initializeFromFile(const std::string& filename)
     }
     in.close();
 
-    int sub_div = 0;
+    int sub_div = 1;
     std::vector<Eigen::Triplet<T>> w_entry;
     int full_dof_cnt = 0;
     int node_cnt = 0;
@@ -50,7 +50,21 @@ void RodNetwork::initializeFromFile(const std::string& filename)
                         sub_div, full_dof_cnt, node_cnt, rod_cnt);
     }
 
+    for (auto& rod : rods)
+    {
+        rod->theta_dof_start_offset = full_dof_cnt;
+        deformed_states.conservativeResize(full_dof_cnt + rod->indices.size() -
+                                           1);
+        deformed_states
+            .segment(rod->theta_dof_start_offset, rod->indices.size() - 1)
+            .setZero();
+        full_dof_cnt += rod->indices.size() - 1;
+    }
 
+    for (auto& rod : rods)
+    {
+        rod->setupBishopFrame();
+    }
 
     rest_states = deformed_states;
     dq = VectorXT::Zero(deformed_states.rows());
@@ -87,14 +101,13 @@ T RodNetwork::computeResidual(VectorXT& residual)
 
     deformed_states = rest_states + dq_projected;
 
-    // for (auto& rod : rods)
-    // {
-    //     rod->reference_angles = deformed_states.template
-    //     segment(rod->theta_dof_start_offset,
-    //         rod->indices.size() - 1);
-    //     if (!run_diff_test)
-    //         rod->rotateReferenceFrameToLastNewtonStepAndComputeReferenceTwsit();
-    // }
+    for (auto& rod : rods)
+    {
+        rod->reference_angles = deformed_states.segment(
+            rod->theta_dof_start_offset, rod->indices.size() - 1);
+        if (!run_diff_test)
+            rod->rotateReferenceFrameToLastNewtonStepAndComputeReferenceTwsit();
+    }
 
     // for (auto& crossing : rod_crossings)
     // {
@@ -106,10 +119,10 @@ T RodNetwork::computeResidual(VectorXT& residual)
 
     if (add_stretching)
         addStretchingForce(residual);
-    // if (add_bending && add_twisting)
-    // {
-    //     add3DBendingAndTwistingForce(full_residual);
-    // }
+    if (add_bending_and_twisting)
+    {
+        addBendingAndTwistingForceEntries(residual);
+    }
     // if (add_rigid_joint)
     //     addJointBendingAndTwistingForce(full_residual);
 
@@ -238,12 +251,11 @@ T RodNetwork::computeTotalEnergy()
 
     deformed_states = rest_states + dq_projected;
 
-    // for (auto& rod : rods)
-    // {
-    //     rod->reference_angles = deformed_states.template
-    //     segment(rod->theta_dof_start_offset,
-    //         rod->indices.size() - 1);
-    // }
+    for (auto& rod : rods)
+    {
+        rod->reference_angles = deformed_states.segment(
+            rod->theta_dof_start_offset, rod->indices.size() - 1);
+    }
     // for (auto& crossing : rod_crossings)
     //     crossing->omega = deformed_states.template
     //     segment<3>(crossing->dof_offset);
@@ -253,8 +265,8 @@ T RodNetwork::computeTotalEnergy()
 
     if (add_stretching)
         E_stretching += addStretchingEnergy();
-    // if (add_bending && add_twisting)
-    //     E_bending_twisting = add3DBendingAndTwistingEnergy();
+    if (add_bending_and_twisting)
+        E_bending_twisting = addBendingAndTwistingEnergy();
 
     // if (add_rigid_joint)
     //     E_bending_twisting += addJointBendingAndTwistingEnergy();
@@ -262,7 +274,8 @@ T RodNetwork::computeTotalEnergy()
     total_energy = E_stretching + E_bending_twisting + E_contact;
 
     // if (verbose)
-    //     std::cout << "E_stretching " << E_stretching << " E_bending_twisting "
+    //     std::cout << "E_stretching " << E_stretching << " E_bending_twisting
+    //     "
     //               << E_bending_twisting << " E_contact " << E_contact
     //               << std::endl;
     return total_energy;
@@ -277,21 +290,20 @@ void RodNetwork::buildSystemDoFMatrix(StiffnessMatrix& K)
                             { dq_projected[offset] = target; });
 
     deformed_states = rest_states + dq_projected;
-    // for (auto& rod : rods)
-    // {
-    //     rod->reference_angles = deformed_states.template
-    //     segment(rod->theta_dof_start_offset, rod->indices.size() - 1);
-    // }
+    for (auto& rod : rods)
+    {
+        rod->reference_angles = deformed_states.segment(
+            rod->theta_dof_start_offset, rod->indices.size() - 1);
+    }
     // for (auto& crossing : rod_crossings)
     //     crossing->omega = deformed_states.template
     //     segment<3>(crossing->dof_offset);
 
     if (add_stretching)
         addStretchingHessian(entry_K);
-    // if (add_bending && add_twisting)
-    // {
-    //     add3DBendingAndTwistingK(entry_K);
-    // }
+    if (add_bending_and_twisting)
+        addBendingAndTwistingHessianEntries(entry_K);
+
     // if (add_rigid_joint)
     //     addJointBendingAndTwistingK(entry_K);
     K.resize(deformed_states.rows(), deformed_states.rows());
@@ -485,7 +497,8 @@ void RodNetwork::addAStraightRod(const TV& from, const TV& to, int from_idx,
     deformed_states.conservativeResize(full_dof_cnt + additional_dofs);
 
     // Create a new rod.
-    Rod* rod = new Rod(deformed_states, rest_states, rod_cnt, false, ROD_A, ROD_B);
+    Rod* rod =
+        new Rod(deformed_states, rest_states, rod_cnt, false, ROD_A, ROD_B);
 
     // Add each subdivision point to deformed_states and update DOF/node counts.
     for (const auto& point : sub_points)
@@ -501,9 +514,8 @@ void RodNetwork::addAStraightRod(const TV& from, const TV& to, int from_idx,
     rod_cnt++;
 }
 
-
 void RodNetwork::resetScene()
-{ 
+{
     deformed_states = rest_states;
     dq.setZero();
     for (auto& rod : rods)

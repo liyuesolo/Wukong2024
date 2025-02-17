@@ -71,7 +71,7 @@ public:
     Matrix<T, 2, 2> bending_coeffs;
 
     // unit m
-    T a = 1e-4, b = 1e-4;
+    T a = 1e-3, b = 1e-3;
 
     // T E = 3.5e9;
     T E = 1e5;
@@ -179,26 +179,7 @@ public:
     {
         int cnt = 0;
         for (int i = 1; i < indices.size() - 1; i++)
-        {
-            bool is_crossing = false;
-            if (cnt < dof_node_location.size())
-            {
-                if (i == dof_node_location[cnt])// || i-1 == dof_node_location[cnt] || i + 1 == dof_node_location[cnt])
-                {
-                    is_crossing = true;
-                    cnt++;
-                }
-            }
-            f(indices[i], indices[i+1], indices[i-1], i, is_crossing);
-        }
-        if (closed)
-        {
-            bool is_crossing = false;
-            if (dof_node_location.size())
-                if (dof_node_location[0] == 0)// || dof_node_location[0] == 1 || dof_node_location[0] == indices.size() - 2)
-                    is_crossing = true;
-            f(indices.front(), indices[1], indices[indices.size() - 2], 0, is_crossing);
-        }
+            f(indices[i], indices[i+1], indices[i-1], i);
     }
 
 // ============================== Lagrangian Eulerian value helpers ===================================
