@@ -15,6 +15,7 @@
 
 
 #include "VecMatDef.h"
+#include "Util.h"
 #include "Rod.h"
 
 class RodNetwork
@@ -56,7 +57,7 @@ public:
 	bool verbose = false;
 	bool run_diff_test = false;
 	int max_newton_iter = 2000;
-    int ls_max = 12;
+    int ls_max = 10;
 	T newton_tol = 1e-6;
 
 private:
@@ -175,7 +176,7 @@ public:
 	// code for initializing rods
 	void addAStraightRod(const TV& from, const TV& to, 
 		int from_idx, int to_idx,
-        int sub_div, int& full_dof_cnt, int& node_cnt, int& rod_cnt);
+        T max_segment_length, int& full_dof_cnt, int& node_cnt, int& rod_cnt);
 
 	void addCrossingPoint(std::vector<TV>& existing_nodes, 
 		const TV& point, int& full_dof_cnt, int& node_cnt);

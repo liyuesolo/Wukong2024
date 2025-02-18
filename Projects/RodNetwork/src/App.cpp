@@ -59,6 +59,7 @@ void App::sceneCallback()
 
 void App::initializeScene()
 {
+    polyscope::options::programName = "WuKongSim";
     polyscope::options::autocenterStructures = true;
     polyscope::view::windowWidth = 3000;
     polyscope::view::windowHeight = 2000;
@@ -66,6 +67,7 @@ void App::initializeScene()
 
     // Initialize polyscope
     polyscope::init();
+    
     // std::cout << simulation.Rods.size() << std::endl;
     std::vector<glm::vec3> nodes;
     std::vector<std::array<size_t, 2>> edges;

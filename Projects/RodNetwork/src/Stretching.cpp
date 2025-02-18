@@ -1,6 +1,7 @@
 #include "../autodiff/RodStretchingEnergy.h"
 #include "../include/RodNetwork.h"
 
+
 void RodNetwork::addStretchingHessian(std::vector<Entry>& entry_K)
 {
     for (auto& rod : rods)
@@ -17,7 +18,7 @@ void RodNetwork::addStretchingHessian(std::vector<Entry>& entry_K)
                 Matrix<T, 6, 6> d2edx2;
                 computeRodStretchingEnergyHessian(rod->ks, Xi, Xj, xi, xj,
                                                   d2edx2);
-
+                projectBlockPD<6>(d2edx2);
                 addHessianEntry<3, 3>(entry_K, {node_i, node_j}, d2edx2, 0, 0);
             });
     }

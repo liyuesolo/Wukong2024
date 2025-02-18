@@ -5,7 +5,7 @@ int main()
 {
 	RodNetwork rod_network;
 	rod_network.initializeFromFile("../../../Projects/RodNetwork/data/rods.txt");
-	rod_network.verbose = false;
+	rod_network.verbose = true;
 	App app(rod_network);
 	app.initializeScene();
 	app.run();

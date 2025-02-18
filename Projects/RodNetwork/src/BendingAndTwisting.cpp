@@ -51,6 +51,7 @@ void RodNetwork::addBendingAndTwistingForceEntries(VectorXT& residual)
         rod->iterate3Nodes(
             [&](int node_i, int node_j, int node_k, int node_idx_local)
             {
+                
                 TV xi, xj, xk, Xi, Xj, Xk;
                 rod->x(node_i, xi);
                 rod->x(node_j, xj);
@@ -127,7 +128,7 @@ void RodNetwork::addBendingAndTwistingHessianEntries(
                     B, rod->kt, 0.0, referenceNormal1, referenceTangent1,
                     referenceNormal2, referenceTangent2, reference_twist, xk,
                     xi, xj, Xk, Xi, Xj, theta0, theta1, d2edx2);
-                
+                // projectBlockPD<11>(d2edx2);
                 addHessianEntry<3, 3>(entry_K, nodes, d2edx2.block<9, 9>(0, 0), 0, 0);
                 addHessianEntry<1, 1>(entry_K, theta_dofs, d2edx2.block<2, 2>(9, 9), 0, 0);
                 addJacobianEntry<3, 1>(entry_K, nodes, theta_dofs, d2edx2.block<9, 2>(0, 9), 0);

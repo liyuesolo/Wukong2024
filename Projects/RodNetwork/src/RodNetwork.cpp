@@ -23,7 +23,12 @@ void RodNetwork::initializeFromFile(const std::string& filename)
     }
     in.close();
 
-    int sub_div = 1;
+    std::vector<std::vector<int>> vtx_to_rods(n_vtx);
+    for (int i = 0; i < n_vtx; i++)
+    {
+    }
+
+    int sub_div = 4;
     std::vector<Eigen::Triplet<T>> w_entry;
     int full_dof_cnt = 0;
     int node_cnt = 0;
@@ -47,7 +52,7 @@ void RodNetwork::initializeFromFile(const std::string& filename)
     {
         addAStraightRod(nodal_positions[edges[i][0]],
                         nodal_positions[edges[i][1]], edges[i][0], edges[i][1],
-                        sub_div, full_dof_cnt, node_cnt, rod_cnt);
+                        0.1, full_dof_cnt, node_cnt, rod_cnt);
     }
 
     for (auto& rod : rods)
@@ -61,9 +66,21 @@ void RodNetwork::initializeFromFile(const std::string& filename)
         full_dof_cnt += rod->indices.size() - 1;
     }
 
+    // deformed_states.conservativeResize(full_dof_cnt + rod_crossings.size() *
+    // 3); deformed_states.template segment(full_dof_cnt, rod_crossings.size() *
+    // 3)
+    //     .setZero();
+
+    // for (auto& crossing : rod_crossings)
+    // {
+    //     crossing->dof_offset = full_dof_cnt;
+    //     full_dof_cnt += 3;
+    // }
+
     for (auto& rod : rods)
     {
         rod->setupBishopFrame();
+        // dirichlet_data[rod->theta_dof_start_offset] = 0;
     }
 
     rest_states = deformed_states;
@@ -111,11 +128,8 @@ T RodNetwork::computeResidual(VectorXT& residual)
 
     // for (auto& crossing : rod_crossings)
     // {
-    //     crossing->omega = deformed_states.template
-    //     segment<3>(crossing->dof_offset);
+    //     crossing->omega = deformed_states.segment<3>(crossing->dof_offset);
     // }
-    // crossing->updateRotation(deformed_states.template
-    // segment<3>(crossing->dof_offset));
 
     if (add_stretching)
         addStretchingForce(residual);
@@ -124,7 +138,7 @@ T RodNetwork::computeResidual(VectorXT& residual)
         addBendingAndTwistingForceEntries(residual);
     }
     // if (add_rigid_joint)
-    //     addJointBendingAndTwistingForce(full_residual);
+    //     addJointBendingAndTwistingForce(residual);
 
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
@@ -232,10 +246,9 @@ T RodNetwork::lineSearchNewton(const VectorXT& residual)
 
     // for (auto& crossing : rod_crossings)
     // {
-    //     Vector<T, 3> new_omega = dq.template
-    //     segment<3>(crossing->reduced_dof_offset);
+    //     Vector<T, 3> new_omega = dq.segment<3>(crossing->reduced_dof_offset);
     //     crossing->updateRotation(new_omega);
-    //     dq.template segment<3>(crossing->reduced_dof_offset).setZero();
+    //     dq.segment<3>(crossing->reduced_dof_offset).setZero();
     // }
 
     return alpha * norm;
@@ -257,8 +270,7 @@ T RodNetwork::computeTotalEnergy()
             rod->theta_dof_start_offset, rod->indices.size() - 1);
     }
     // for (auto& crossing : rod_crossings)
-    //     crossing->omega = deformed_states.template
-    //     segment<3>(crossing->dof_offset);
+    //     crossing->omega = deformed_states.segment<3>(crossing->dof_offset);
 
     T total_energy = 0;
     T E_stretching = 0, E_bending_twisting = 0, E_contact = 0;
@@ -296,8 +308,7 @@ void RodNetwork::buildSystemDoFMatrix(StiffnessMatrix& K)
             rod->theta_dof_start_offset, rod->indices.size() - 1);
     }
     // for (auto& crossing : rod_crossings)
-    //     crossing->omega = deformed_states.template
-    //     segment<3>(crossing->dof_offset);
+    //     crossing->omega = deformed_states.segment<3>(crossing->dof_offset);
 
     if (add_stretching)
         addStretchingHessian(entry_K);
@@ -455,29 +466,102 @@ void RodNetwork::addCrossingPoint(std::vector<TV>& existing_nodes,
     node_cnt++;
 }
 
-void RodNetwork::addAStraightRod(const TV& from, const TV& to, int from_idx,
-                                 int to_idx, int sub_div, int& full_dof_cnt,
-                                 int& node_cnt, int& rod_cnt)
-{
+// void RodNetwork::addAStraightRod(const TV& from, const TV& to, int from_idx,
+//                                  int to_idx, int sub_div, int& full_dof_cnt,
+//                                  int& node_cnt, int& rod_cnt)
+// {
 
+//     // Start with the rod's starting index.
+//     std::vector<int> node_indices;
+//     node_indices.push_back(from_idx);
+
+//     // Create interior subdivision points (if any).
+//     std::vector<TV> sub_points;
+//     if (sub_div > 0)
+//     {
+//         const int n_sub_nodes = sub_div; // Number of interior nodes.
+//         const T total_length = (to - from).norm();
+
+//         // Guard against zero-length rods.
+//         if (total_length < 1e-8)
+//         {
+//             throw std::runtime_error("Rod has too small length.");
+//         }
+
+//         if (total_length > 1e-4) // otherwise do not subdivide
+//         {
+
+//             const T segment_length = total_length / T(n_sub_nodes + 1);
+//             const TV direction = (to - from).normalized();
+
+//             // Compute each subdivision point.
+//             for (int j = 1; j <= n_sub_nodes; ++j)
+//             {
+//                 TV point = from + segment_length * T(j) * direction;
+//                 sub_points.push_back(point);
+//                 // Compute new node index for each interior point.
+//                 node_indices.push_back(node_cnt + j - 1);
+//             }
+//         }
+
+//     }
+//     else
+//     {
+//         if ((to - from).norm() < 1e-6)
+//             throw std::runtime_error("Rod has small length.");
+//     }
+//     // Append the rod's ending index.
+//     node_indices.push_back(to_idx);
+
+//     // Resize deformed_states to accommodate new nodes.
+//     const int additional_dofs = static_cast<int>(sub_points.size()) * 3;
+//     deformed_states.conservativeResize(full_dof_cnt + additional_dofs);
+
+//     // Create a new rod.
+//     Rod* rod =
+//         new Rod(deformed_states, rest_states, rod_cnt, false, ROD_A, ROD_B);
+
+//     // Add each subdivision point to deformed_states and update DOF/node
+//     counts. for (const auto& point : sub_points)
+//     {
+//         deformed_states.segment<3>(full_dof_cnt) = point;
+//         full_dof_cnt += 3;
+//         node_cnt++;
+//     }
+
+//     // Set the node indices for this rod and add it to the network.
+//     rod->indices = node_indices;
+//     rods.push_back(rod);
+//     rod_cnt++;
+// }
+
+void RodNetwork::addAStraightRod(const TV& from, const TV& to, int from_idx,
+                                 int to_idx, T max_segment_length, int& full_dof_cnt, int& node_cnt,
+                                 int& rod_cnt)
+{
     // Start with the rod's starting index.
     std::vector<int> node_indices;
     node_indices.push_back(from_idx);
 
-    // Create interior subdivision points (if any).
+    // Compute the total length of the rod.
+    const T total_length = (to - from).norm();
+
+    // Guard against zero-length rods.
+    if (total_length < 1e-8)
+        throw std::runtime_error("Rod has too small length.");
+
+    // Compute the number of segments such that no segment exceeds
+    // max_segment_length. If total_length is less than max_segment_length, we
+    // use just one segment (i.e., no interior subdivisions).
+    int n_segments = std::max(
+        1, static_cast<int>(std::ceil(total_length / max_segment_length)));
+    int n_sub_nodes = n_segments - 1;
+
+    // Create interior subdivision points.
     std::vector<TV> sub_points;
-    if (sub_div > 0)
+    if (n_sub_nodes > 0)
     {
-        const int n_sub_nodes = sub_div; // Number of interior nodes.
-        const T total_length = (to - from).norm();
-
-        // Guard against zero-length rods.
-        if (total_length == T(0))
-        {
-            throw std::runtime_error("Rod has zero length.");
-        }
-
-        const T segment_length = total_length / T(n_sub_nodes + 1);
+        const T segment_length = total_length / T(n_segments);
         const TV direction = (to - from).normalized();
 
         // Compute each subdivision point.
@@ -489,6 +573,7 @@ void RodNetwork::addAStraightRod(const TV& from, const TV& to, int from_idx,
             node_indices.push_back(node_cnt + j - 1);
         }
     }
+
     // Append the rod's ending index.
     node_indices.push_back(to_idx);
 
