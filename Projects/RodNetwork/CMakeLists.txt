@@ -14,6 +14,13 @@ file(GLOB HEADERS "include/*.h" "autodiff/*.h")
 file(GLOB SOURCES "src/*.cpp" "autodiff/*.cpp")
 
 add_executable(RodNetwork ${HEADERS} ${SOURCES})
+
+if (APPLE)
+    find_package(CHOLMOD REQUIRED)
+    include_directories(${CHOLMOD_INCLUDES})
+    find_package(TBB REQUIRED)
+    target_link_libraries(RodNetwork ${CHOLMOD_LIBRARIES} TBB::tbb)
+endif()
 target_include_directories(RodNetwork PUBLIC ../../Libs/spectra/include)
 target_include_directories(RodNetwork PUBLIC ../../Deps/libigl/include)
 target_link_libraries(RodNetwork ${DEPS} polyscope)
