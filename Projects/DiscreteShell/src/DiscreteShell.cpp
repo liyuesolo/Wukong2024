@@ -1,6 +1,7 @@
 #include <Eigen/CholmodSupport>
 #include <igl/readOBJ.h>
 #include <igl/massmatrix.h>
+#include <igl/per_face_normals.h>
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
 #include <Spectra/SymEigsSolver.h>
@@ -299,6 +300,115 @@ T DiscreteShell::lineSearchNewton(const VectorXT& residual)
     return alpha * du.norm();
 }
 
+void DiscreteShell::initializeNonManifoldExampleScene(const std::string& filename)
+{
+    gravity[1] = 9.8;
+    MatrixXT V; MatrixXi F;
+    igl::readOBJ(filename, V, F);
+
+    TV min_corner = V.colwise().minCoeff();
+    TV max_corner = V.colwise().maxCoeff();
+
+    T bb_diag = (max_corner - min_corner).norm();
+
+    V *= 1.0 / bb_diag;
+
+    V *= 0.5;
+
+    igl::per_face_normals(V, F, face_normals);    
+
+    iglMatrixFatten<T, 3>(V, undeformed);
+    iglMatrixFatten<int, 3>(F, faces);
+    deformed = undeformed;
+    u = VectorXT::Zero(deformed.rows());
+    external_force = VectorXT::Zero(deformed.rows());
+    
+    buildHingeStructure();
+    dynamics = true;
+    add_gravity = true;
+    use_consistent_mass_matrix = true;
+    // E = 0.0;
+    dt = 1.0 / 30.0;
+    simulation_duration = 10000;
+    
+    hinge_stiffness.setConstant(10);
+    if (dynamics)
+    {
+        initializeDynamicStates();
+    }
+
+}
+
+void DiscreteShell::initializeDynamicExampleScene(const std::string& filename)
+{
+    gravity[1] = 9.8;
+    MatrixXT V; MatrixXi F;
+    igl::readOBJ(filename, V, F);
+
+    TV min_corner = V.colwise().minCoeff();
+    TV max_corner = V.colwise().maxCoeff();
+
+    T bb_diag = (max_corner - min_corner).norm();
+
+    V *= 1.0 / bb_diag;
+
+    V *= 0.5;
+
+    auto rotationMatrixFromEulerAngle = [](T angle_z, T angle_y, T angle_x)
+    {
+        Eigen::Matrix3d R, yaw, pitch, roll;
+        yaw.setZero(); pitch.setZero(); roll.setZero();
+        yaw(0, 0) = cos(angle_z);	yaw(0, 1) = -sin(angle_z);
+        yaw(1, 0) = sin(angle_z);	yaw(1, 1) = cos(angle_z);
+        yaw(2, 2) = 1.0;
+        //y rotation
+        pitch(0, 0) = cos(angle_y); pitch(0, 2) = sin(angle_y);
+        pitch(1, 1) = 1.0;
+        pitch(2, 0) = -sin(angle_y); pitch(2, 2) = cos(angle_y);
+        //x rotation
+        roll(0, 0) = 1.0;
+        roll(1, 1) = cos(angle_x); roll(1, 2) = -sin(angle_x);
+        roll(2, 1) = sin(angle_x); roll(2, 2) = cos(angle_x);
+        R = yaw * pitch * roll;
+        return R;
+    };
+
+    // TM R = rotationMatrixFromEulerAngle(0, 0, M_PI_2);
+    // for (int i = 0; i < V.rows(); i++)
+    // {
+    //     V.row(i) = (R * V.row(i).transpose()).transpose();
+    // }
+    igl::per_face_normals(V, F, face_normals);
+
+    iglMatrixFatten<T, 3>(V, undeformed);
+    iglMatrixFatten<int, 3>(F, faces);
+    deformed = undeformed;
+    u = VectorXT::Zero(deformed.rows());
+    external_force = VectorXT::Zero(deformed.rows());
+    external_force[5 * 3 + 2] = -10.0;
+    buildHingeStructure();
+    dynamics = true;
+    add_gravity = true;
+    use_consistent_mass_matrix = true;
+    // E = 0.0;
+    dt = 1.0 / 30.0;
+    simulation_duration = 10000;
+    
+    hinge_stiffness.setConstant(10);
+    if (dynamics)
+    {
+        initializeDynamicStates();
+    }
+
+    for (int j = 80; j < 100; j++)
+    {
+        for (int d = 0; d < 3; d++)
+        {
+            dirichlet_data[j * 3 + d] = 0;
+        }
+    }
+}
+
 void DiscreteShell::initializeFromFile(const std::string& filename)
 {
     MatrixXT V; MatrixXi F;
@@ -337,21 +447,21 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
     // {
     //     V.row(i) = (R * V.row(i).transpose()).transpose();
     // }
-    
+    igl::per_face_normals(V, F, face_normals);
 
     iglMatrixFatten<T, 3>(V, undeformed);
     iglMatrixFatten<int, 3>(F, faces);
     deformed = undeformed;
     u = VectorXT::Zero(deformed.rows());
     external_force = VectorXT::Zero(deformed.rows());
-    external_force[5 * 3 + 2] = -10.0;
+    // external_force[5 * 3 + 2] = -10.0;
     buildHingeStructure();
     dynamics = true;
     add_gravity = true;
-    use_consistent_mass_matrix = false;
+    use_consistent_mass_matrix = true;
     // E = 0.0;
     dt = 1.0 / 30.0;
-    simulation_duration = 1000000;
+    simulation_duration = 10000;
     
     hinge_stiffness.setConstant(10);
     if (dynamics)
@@ -363,98 +473,226 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
 
 void DiscreteShell::buildHingeStructure()
 {
-    struct Hinge
-	{
-		Hinge()
-		{
-			for (int i = 0; i < 2; i++)
-			{
-				edge[i] = -1;
-				flaps[i] = -1;
-				tris[i] = -1;
-			}
-		}
-		int edge[2];
-		int flaps[2];
-		int tris[2];
-	};
-	
-	std::vector<Hinge> hinges_temp;
-	
-	hinges_temp.clear();
-	std::map<std::pair<int, int>, int> edge2index;
-	for (int i = 0; i < faces.size() / 3; i++)
-	{
-		for (int j = 0; j < 3; j++)
-		{
-			int i1 = faces(3 * i + j);
-			int i2 = faces(3 * i + (j + 1) % 3);
-			int i1t = i1;
-			int i2t = i2;
-			bool swapped = false;
-			if (i1t > i2t)
-			{
-				std::swap(i1t, i2t);
-				swapped = true;
-			}
-			
-			auto ei = std::make_pair(i1t, i2t);
-			auto ite = edge2index.find(ei);
-			if (ite == edge2index.end())
-			{
-				//insert new hinge
-				edge2index[ei] = hinges_temp.size();
-				hinges_temp.push_back(Hinge());
-				Hinge& hinge = hinges_temp.back();
-				hinge.edge[0] = i1t;
-				hinge.edge[1] = i2t;
-				int itmp = swapped ? 1 : 0;
-				hinge.tris[itmp] = i;
-				hinge.flaps[itmp] = faces(3 * i + (j + 2) % 3);
-			}
-			else
-			{
-				//hinge for this edge already exists, add missing information for this triangle
-				Hinge& hinge = hinges_temp[ite->second];
-				int itmp = swapped ? 1 : 0;
-				hinge.tris[itmp] = i;
-				hinge.flaps[itmp] = faces(3 * i + (j + 2) % 3);
-			}
-		}
-	}
-	//ordering for edges
-	
-	hinges.resize(hinges_temp.size(), Eigen::NoChange);
-	int ii = 0;
-	/*
-      auto diff code takes
-           x3
-         /   \
-        x2---x1
-         \   /
-           x0	
+    // For each edge occurrence we record:
+    //  - the triangle index (tri)
+    //  - the vertex opposite to the edge (flap)
+    //  - whether the edge’s vertices had to be swapped (swapped)
+    struct Occurrence {
+        int tri;
+        int flap;
+        bool swapped;
+    };
 
-      hinge is 
-           x2
-         /   \
-        x0---x1
-         \   /
-           x3	
-    */
-    for(Hinge & hinge : hinges_temp) {
-		if ((hinge.tris[0] == -1) || (hinge.tris[1] == -1)) {
-			continue; //skip boundary edges
-		}
-		hinges(ii, 2) = hinge.edge[0]; //x0
-		hinges(ii, 1) = hinge.edge[1]; //x1
-		hinges(ii, 3) = hinge.flaps[0]; //x2
-		hinges(ii, 0) = hinge.flaps[1]; //x3
-		++ii;
-	}
-	hinges.conservativeResize(ii, Eigen::NoChange);
+    // Map from a canonical edge (ordered pair) to all its occurrences.
+    typedef std::pair<int,int> EdgeKey;
+    std::map<EdgeKey, std::vector<Occurrence>> edgeOccurrences;
+
+    // Loop over all faces. For each face, process its three edges.
+    // The "flap" vertex is the vertex opposite the current edge.
+    for (int i = 0; i < faces.size() / 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            int i1 = faces(3 * i + j);
+            int i2 = faces(3 * i + (j + 1) % 3);
+
+            // Create a canonical ordering for the edge
+            int i1t = i1, i2t = i2;
+            bool swapped = false;
+            if (i1t > i2t) {
+                std::swap(i1t, i2t);
+                swapped = true;
+            }
+            EdgeKey key(i1t, i2t);
+
+            // The flap is the third vertex of the triangle.
+            int flap = faces(3 * i + (j + 2) % 3);
+            edgeOccurrences[key].push_back({ i, flap, swapped });
+        }
+    }
+
+    // For each edge shared by at least two faces, create a hinge for every pair.
+    struct Hinge {
+        int edge[2];
+        int flaps[2];
+        int tris[2];
+    };
+    std::vector<Hinge> hinges_temp;
+    for (auto &entry : edgeOccurrences) {
+        const EdgeKey &edge = entry.first;
+        std::vector<Occurrence> &occList = entry.second;
+        if (occList.size() < 2)
+            continue; // skip boundary edges
+
+        // Create a hinge for every distinct pair of adjacent faces
+        for (size_t a = 0; a < occList.size(); a++) {
+            for (size_t b = a + 1; b < occList.size(); b++) {
+                Occurrence occA = occList[a];
+                Occurrence occB = occList[b];
+                Hinge hinge;
+                hinge.edge[0] = edge.first;
+                hinge.edge[1] = edge.second;
+
+                // Order the two occurrences:
+                // - If one occurrence is non-swapped and the other is swapped,
+                //   put the non-swapped one in slot 0.
+                // - Otherwise, order by triangle index.
+                if (occA.swapped != occB.swapped) {
+                    if (!occA.swapped) {
+                        hinge.tris[0] = occA.tri;
+                        hinge.flaps[0] = occA.flap;
+                        hinge.tris[1] = occB.tri;
+                        hinge.flaps[1] = occB.flap;
+                    } else {
+                        hinge.tris[0] = occB.tri;
+                        hinge.flaps[0] = occB.flap;
+                        hinge.tris[1] = occA.tri;
+                        hinge.flaps[1] = occA.flap;
+                    }
+                } else {
+                    // Both have the same flag; order by triangle index.
+                    if (occA.tri < occB.tri) {
+                        hinge.tris[0] = occA.tri;
+                        hinge.flaps[0] = occA.flap;
+                        hinge.tris[1] = occB.tri;
+                        hinge.flaps[1] = occB.flap;
+                    } else {
+                        hinge.tris[0] = occB.tri;
+                        hinge.flaps[0] = occB.flap;
+                        hinge.tris[1] = occA.tri;
+                        hinge.flaps[1] = occA.flap;
+                    }
+                }
+
+                // --- New: Adjust ordering based on face normals ---
+                // Ensure the two adjacent faces have a positive dot product.
+                // (Assumes that face_normals.row(i) returns the normal for face i.)
+                Eigen::Vector3d n0 = face_normals.row(hinge.tris[0]);
+                Eigen::Vector3d n1 = face_normals.row(hinge.tris[1]);
+                if (n0.dot(n1) < 0) {
+                    std::swap(hinge.tris[0], hinge.tris[1]);
+                    std::swap(hinge.flaps[0], hinge.flaps[1]);
+                }
+                // -------------------------------------------------------
+
+                hinges_temp.push_back(hinge);
+            }
+        }
+    }
+
+    // Assemble the final hinges data structure.
+    // We use the same column ordering as before:
+    //   column 2 <- hinge.edge[0] (x0)
+    //   column 1 <- hinge.edge[1] (x1)
+    //   column 3 <- hinge.flaps[0] (x2)
+    //   column 0 <- hinge.flaps[1] (x3)
+    hinges.resize(hinges_temp.size(), Eigen::NoChange);
+    int ii = 0;
+    for (const Hinge &hinge : hinges_temp) {
+        hinges(ii, 2) = hinge.edge[0];   // x0
+        hinges(ii, 1) = hinge.edge[1];     // x1
+        hinges(ii, 3) = hinge.flaps[0];    // x2
+        hinges(ii, 0) = hinge.flaps[1];    // x3
+        ++ii;
+    }
+    hinges.conservativeResize(ii, Eigen::NoChange);
+
     hinge_stiffness.resize(hinges.rows());
     hinge_stiffness.setOnes();
 }
+
+// void DiscreteShell::buildHingeStructure()
+// {
+//     struct Hinge
+// 	{
+// 		Hinge()
+// 		{
+// 			for (int i = 0; i < 2; i++)
+// 			{
+// 				edge[i] = -1;
+// 				flaps[i] = -1;
+// 				tris[i] = -1;
+// 			}
+// 		}
+// 		int edge[2];
+// 		int flaps[2];
+// 		int tris[2];
+// 	};
+	
+// 	std::vector<Hinge> hinges_temp;
+	
+// 	hinges_temp.clear();
+// 	std::map<std::pair<int, int>, int> edge2index;
+// 	for (int i = 0; i < faces.size() / 3; i++)
+// 	{
+// 		for (int j = 0; j < 3; j++)
+// 		{
+// 			int i1 = faces(3 * i + j);
+// 			int i2 = faces(3 * i + (j + 1) % 3);
+// 			int i1t = i1;
+// 			int i2t = i2;
+// 			bool swapped = false;
+// 			if (i1t > i2t)
+// 			{
+// 				std::swap(i1t, i2t);
+// 				swapped = true;
+// 			}
+			
+// 			auto ei = std::make_pair(i1t, i2t);
+// 			auto ite = edge2index.find(ei);
+// 			if (ite == edge2index.end())
+// 			{
+// 				//insert new hinge
+// 				edge2index[ei] = hinges_temp.size();
+// 				hinges_temp.push_back(Hinge());
+// 				Hinge& hinge = hinges_temp.back();
+// 				hinge.edge[0] = i1t;
+// 				hinge.edge[1] = i2t;
+// 				int itmp = swapped ? 1 : 0;
+// 				hinge.tris[itmp] = i;
+// 				hinge.flaps[itmp] = faces(3 * i + (j + 2) % 3);
+// 			}
+// 			else
+// 			{
+// 				//hinge for this edge already exists, add missing information for this triangle
+// 				Hinge& hinge = hinges_temp[ite->second];
+// 				int itmp = swapped ? 1 : 0;
+// 				hinge.tris[itmp] = i;
+// 				hinge.flaps[itmp] = faces(3 * i + (j + 2) % 3);
+// 			}
+// 		}
+// 	}
+// 	//ordering for edges
+	
+// 	hinges.resize(hinges_temp.size(), Eigen::NoChange);
+// 	int ii = 0;
+// 	/*
+//       auto diff code takes
+//            x3
+//          /   \
+//         x2---x1
+//          \   /
+//            x0	
+
+//       hinge is 
+//            x2
+//          /   \
+//         x0---x1
+//          \   /
+//            x3	
+//     */
+//     for(Hinge & hinge : hinges_temp) {
+// 		if ((hinge.tris[0] == -1) || (hinge.tris[1] == -1)) {
+// 			continue; //skip boundary edges
+// 		}
+// 		hinges(ii, 2) = hinge.edge[0]; //x0
+// 		hinges(ii, 1) = hinge.edge[1]; //x1
+// 		hinges(ii, 3) = hinge.flaps[0]; //x2
+// 		hinges(ii, 0) = hinge.flaps[1]; //x3
+// 		++ii;
+// 	}
+// 	hinges.conservativeResize(ii, Eigen::NoChange);
+//     hinge_stiffness.resize(hinges.rows());
+//     hinge_stiffness.setOnes();
+// }
 
 void DiscreteShell::addShellInplaneEnergy(T& energy)
 {
@@ -509,70 +747,7 @@ void DiscreteShell::addShellEnergy(T& energy)
 
 void DiscreteShell::addShellInplaneForceEntries(VectorXT& residual)
 {
-
     
-
-    auto barycentricJacobian = [&](const Eigen::Vector3d &a, const Eigen::Vector3d &b, const Eigen::Vector3d &c)
-    {
-        Eigen::Vector3d v0 = b - a, v1 = c - a;
-        //Eigen::Vector3d v2 = p - a;
-        T d00 = v0.dot(v0); // (b - a).dot(b - a) => d d00 / d p = 0
-        T d01 = v0.dot(v1); // (b - a).dot(c - a) => d d01 / d p = 0
-        T d11 = v1.dot(v1); // (c - a).dot(c - a) => d d11 / dp = 0
-        //T d20 = v2.dot(v0); // (p - a).dot(b - a) => d d20 / dp = (b - a)^T
-        //T d21 = v2.dot(v1); //  ( p - a).dot(c - a) = > d21 / dp = (c - a)^T
-        T denom = d00 * d11 - d01 * d01; // => d00 * d11 constant in => drops out, d01 constant in p => derivative is 0
-        //v = (d11 * d20 - d01 * d21) / denom;
-        //w = (d00 * d21 - d01 * d20) / denom;
-        //u = 1.0f - v - w;
-        //Eigen::Vector3d dvdp = (d11 * dd20 / dp - d01 * d d21 / dp) / denom;
-        Eigen::Vector3d dvdp = (d11 * (b - a) - d01 * (c - a)) / denom;
-        Eigen::Vector3d dwdp = (d00 * (c - a) - d01 * (b - a)) / denom;
-        Matrix<T, 2, 3> result;
-        result.row(0) = dvdp.transpose();
-        result.row(1) = dwdp.transpose();
-        return result;
-    };
-
-    auto compute3DCSTDeformationGradient = [&](const Eigen::Vector3d &x1Undef, const Eigen::Vector3d &x2Undef, const Eigen::Vector3d &x3Undef,
-        const Eigen::Vector3d &x1, const Eigen::Vector3d &x2, const Eigen::Vector3d &x3
-    )
-    {
-        // defGrad = d x / d X
-        // X(b) = X * N(b) = X * [ 1 - b1 - b2; b1; b2];
-        // b(X) = [X2 - X1, X3 - X1]^-1 [X - X1]
-        // x(X) = x * N(b(X)) then take the jacobian of this to get defgrad
-        // d x / d X = x * d N / dX = x * dN/db * [X2 - X1, X3 - X1]^-1;
-        // however here X means a 2 dimensional vector! so we get a 3x2 defgrad
-        // x(X) = x * N(Barycentric(X, X1, X2, X3))
-        // defGrad = dx / d X = x * dN/dB * dB /dX
-        // that would work except that the defGradient is gonna be 3x3 and in the undef config. something like [1, 0, 0;0,0,0;0,0,1];
-        // and then E = 0.5 * (F^T F - I)  is gonna give a non zero energy in the undef config.
-        //instead we choose a 2D coordinate system X* in the undef configuration for which we compute the def grad
-        // defGrad = d x / d X*
-        // x(X*) = x * N(Barycentric(X(X*)));
-        // X(X*) = X1 + t * X*[0] + q *X*[1]
-
-        Eigen::Vector3d tUndef = (x2Undef - x1Undef).normalized();
-        Eigen::Vector3d e2Undef = (x3Undef - x1Undef);
-        Eigen::Vector3d qUndef = (e2Undef - tUndef * e2Undef.dot(tUndef)).normalized();
-
-        Eigen::Matrix3d x;
-        x << x1, x2, x3;
-
-        //N(b) = [1 - b1 - b2, b1, b2]
-        Matrix<T, 3, 2> dNdb;
-        dNdb << -1.0, -1.0,
-            1.0, 0.0,
-            0.0, 1.0;
-
-        Matrix<T, 2, 3> dBdX = barycentricJacobian(x1Undef, x2Undef, x3Undef);
-        Matrix<T, 3, 2> dXdXStar;
-        dXdXStar << tUndef, qUndef;
-        Matrix<T, 3, 2> defGrad = x * dNdb * dBdX * dXdXStar; //note that this F is not very intuitive it can contain -1 for undef configuration, but its not a problem as long as only F^T*F is used
-        return defGrad;
-    };
-
     iterateFaceSerial([&](int face_idx)
     {
         FaceVtx vertices = getFaceVtxDeformed(face_idx);
@@ -605,7 +780,12 @@ void DiscreteShell::addShellBendingForceEntries(VectorXT& residual)
         
         TV x0 = deformed_vertices.row(0); TV x1 = deformed_vertices.row(1); TV x2 = deformed_vertices.row(2); TV x3 = deformed_vertices.row(3);
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2); TV X3 = undeformed_vertices.row(3);
-
+        T rest_angle = computeAngle(X0, X1, X2, X3) / M_PI * 180.0;
+        if (rest_angle > 89)
+        {
+            std::cout << rest_angle <<std::endl;
+            std::getchar();
+        } 
         computeDSBendingEnergyGradient(k_bend, x0, x1, x2, x3, X0, X1, X2, X3, dedx);
         addForceEntry<3>(residual, 
             {hinge_idx[0], hinge_idx[1], hinge_idx[2], hinge_idx[3]}, -dedx);
@@ -654,9 +834,13 @@ void DiscreteShell::addShellBendingHessianEntries(std::vector<Entry>& entries)
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2); TV X3 = undeformed_vertices.row(3);
 
         computeDSBendingEnergyHessian(k_bend, x0, x1, x2, x3, X0, X1, X2, X3, hess);
+        // Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, 12, 12>> eigenSolver(
+        //     hess);
+        // std::cout << eigenSolver.eigenvalues().transpose() << std::endl;
+        // std::getchar();
         addHessianEntry<3, 3>(entries, 
                             {hinge_idx[0], hinge_idx[1], hinge_idx[2], hinge_idx[3]}, 
-                            hess);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+                            hess);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
 
     });
 }

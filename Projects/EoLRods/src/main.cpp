@@ -7,7 +7,7 @@ int main()
     Scene scene(sim);
     // scene.buildInterlockingSquareScene(8);
     // scene.buildFullScaleSquareScene(8);
-    scene.buildOneCrossScene(32);
+    scene.buildOneCrossSceneCurved(32);
     
     App app(sim);
     app.initializeScene();
