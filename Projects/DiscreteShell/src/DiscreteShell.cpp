@@ -245,6 +245,8 @@ void DiscreteShell::computeLinearModes(MatrixXT& eigen_vectors,
 
 void DiscreteShell::buildSystemMatrix(StiffnessMatrix& K)
 {
+    int n_dof = deformed.rows();
+
     deformed = undeformed + u;
     std::vector<Entry> entries;
     addShellHessianEntries(entries);
@@ -252,12 +254,11 @@ void DiscreteShell::buildSystemMatrix(StiffnessMatrix& K)
         addShellGravitionHessianEntry(entries);
     if (dynamics)
         addInertialHessianEntries(entries);
-    int n_dof = deformed.rows();
     K.resize(n_dof, n_dof);
     K.setFromTriplets(entries.begin(), entries.end());
+
     if (!run_diff_test)
         projectDirichletDoFMatrix(K, dirichlet_data);
-
     K.makeCompressed();
 }
 
@@ -342,7 +343,7 @@ void DiscreteShell::initializeNonManifoldExampleScene(
     buildHingeStructure();
     dynamics = true;
     add_gravity = true;
-    use_consistent_mass_matrix = false;
+    use_consistent_mass_matrix = true;
     // E = 0.0;
     dt = 1.0 / 30.0;
     simulation_duration = 10000;
@@ -696,9 +697,9 @@ void DiscreteShell::buildHingeStructure()
 // 			else
 // 			{
 // 				//hinge for this edge already exists, add missing information
-// for this triangle 				Hinge& hinge = hinges_temp[ite->second]; 				int itmp = swapped
-// ? 1 : 0; 				hinge.tris[itmp] = i; 				hinge.flaps[itmp] = faces(3 * i + (j + 2) %
-// 3);
+// for this triangle 				Hinge& hinge = hinges_temp[ite->second];
+// int itmp = swapped ? 1 : 0; 				hinge.tris[itmp] = i;
+// hinge.flaps[itmp] = faces(3 * i + (j + 2) % 3);
 // 			}
 // 		}
 // 	}
@@ -833,11 +834,7 @@ void DiscreteShell::addShellBendingForceEntries(VectorXT& residual)
             TV X2 = undeformed_vertices.row(2);
             TV X3 = undeformed_vertices.row(3);
             T rest_angle = computeAngle(X0, X1, X2, X3) / M_PI * 180.0;
-            if (rest_angle > 89)
-            {
-                std::cout << rest_angle << std::endl;
-                std::getchar();
-            }
+
             computeDSBendingEnergyGradient(k_bend, x0, x1, x2, x3, X0, X1, X2,
                                            X3, dedx);
             addForceEntry<3>(
@@ -1426,9 +1423,14 @@ void DiscreteShell::computeMassMatrix()
     vectorToIGLMatrix<T, 3>(undeformed, V);
     vectorToIGLMatrix<int, 3>(faces, F);
     igl::massmatrix(V, F, igl::MASSMATRIX_TYPE_VORONOI, M);
-    mass_diagonal.resize(deformed.rows() / 3);
+    mass_diagonal.resize(deformed.rows());
     mass_diagonal.setZero();
-    mass_diagonal = M.diagonal();
+    for (int i = 0; i < deformed.rows() / 3; i++)
+    {
+        mass_diagonal[i * 3 + 0] = M.coeff(i, i);
+        mass_diagonal[i * 2 + 1] = M.coeff(i, i);
+        mass_diagonal[i * 3 + 2] = M.coeff(i, i);
+    }
 }
 
 void DiscreteShell::computeConsistentMassMatrix(const FaceVtx& vtx_pos,
