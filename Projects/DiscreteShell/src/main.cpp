@@ -7,11 +7,9 @@
 int main()
 {
     DiscreteShell discrete_shell;
-    // discrete_shell.initializeDynamicExampleScene("../../../Projects/DiscreteShell/data/grid.obj");
-    discrete_shell.initializeNonManifoldExampleScene("../../../Projects/DiscreteShell/data/metashell.obj");
-    discrete_shell.verbose = true;
-    // discrete_shell.generateAutodiffRuntime();
-    // discrete_shell.setHingeStiffness();
+    discrete_shell.initializeDynamicExampleScene("../../../Projects/DiscreteShell/data/grid.obj");
+    // discrete_shell.initializeNonManifoldExampleScene("../../../Projects/DiscreteShell/data/metashell.obj");
+    discrete_shell.verbose = false;
 
     
     App<DiscreteShell> app(discrete_shell);
