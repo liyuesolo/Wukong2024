@@ -42,7 +42,7 @@ if (NOT APPLE)
     add_definitions(-DEIGEN_USE_MKL_ALL)
     add_definitions(-DMKL_LP64)
 
-    set(MKLROOT "/opt/intel/oneapi/mkl/2024.1")
+    set(MKLROOT "/opt/intel/oneapi/mkl/2024.2")
     include_directories(${MKLROOT}/include)
     link_directories(${MKLROOT}/lib)
 endif()
