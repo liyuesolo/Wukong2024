@@ -29,6 +29,7 @@ public:
 public:
     void initializeScene()
     {
+        polyscope::options::programName = "WuKongSim";
         polyscope::options::autocenterStructures = true;
         polyscope::view::windowWidth = 3000;
         polyscope::view::windowHeight = 2000;

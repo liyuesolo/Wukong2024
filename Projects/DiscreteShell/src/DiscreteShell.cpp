@@ -1,10 +1,11 @@
 #include <Eigen/CholmodSupport>
-#include <igl/readOBJ.h>
-#include <igl/massmatrix.h>
-#include <Spectra/SymEigsShiftSolver.h>
-#include <Spectra/MatOp/SparseSymShiftSolve.h>
-#include <Spectra/SymEigsSolver.h>
 #include <Spectra/MatOp/SparseSymMatProd.h>
+#include <Spectra/MatOp/SparseSymShiftSolve.h>
+#include <Spectra/SymEigsShiftSolver.h>
+#include <Spectra/SymEigsSolver.h>
+#include <igl/massmatrix.h>
+#include <igl/per_face_normals.h>
+#include <igl/readOBJ.h>
 
 #include "../autodiff/CST3DShell.h"
 #include "../include/DiscreteShell.h"
@@ -18,22 +19,21 @@ bool DiscreteShell::advanceOneTimeStep()
         T residual_norm = computeResidual(residual);
         // residual_norms.push_back(residual_norm);
         if (verbose)
-            std::cout << "[NEWTON] iter " << iter << "/" 
-                << max_newton_iter << ": residual_norm " 
-                << residual_norm << " tol: " << newton_tol << std::endl;
+            std::cout << "[NEWTON] iter " << iter << "/" << max_newton_iter
+                      << ": residual_norm " << residual_norm
+                      << " tol: " << newton_tol << std::endl;
         if (residual_norm < newton_tol || iter == max_newton_iter)
         {
-            std::cout << "[NEWTON] iter " << iter << "/" 
-                << max_newton_iter << ": residual_norm " 
-                << residual_norm << " tol: " << newton_tol << std::endl;
+            std::cout << "[NEWTON] iter " << iter << "/" << max_newton_iter
+                      << ": residual_norm " << residual_norm
+                      << " tol: " << newton_tol << std::endl;
             break;
         }
         T du_norm = 1e10;
         du_norm = lineSearchNewton(residual);
         if (du_norm < 1e-10)
             break;
-        iter ++;
-        
+        iter++;
     }
 
     return true;
@@ -43,7 +43,8 @@ bool DiscreteShell::advanceOneStep(int step)
 {
     if (dynamics)
     {
-        std::cout << "=================== Time STEP " << step * dt << "s===================" << std::endl;
+        std::cout << "=================== Time STEP " << step * dt
+                  << "s===================" << std::endl;
         bool finished = advanceOneTimeStep();
         updateDynamicStates();
         if (step * dt > simulation_duration)
@@ -52,13 +53,14 @@ bool DiscreteShell::advanceOneStep(int step)
     }
     else
     {
-        std::cout << "===================STEP " << step << "===================" << std::endl;
+        std::cout << "===================STEP " << step
+                  << "===================" << std::endl;
         VectorXT residual = external_force;
         T residual_norm = computeResidual(residual);
         residual_norms.push_back(residual_norm);
-        std::cout << "[NEWTON] iter " << step << "/" 
-            << max_newton_iter << ": residual_norm " 
-            << residual_norm << " tol: " << newton_tol << std::endl;
+        std::cout << "[NEWTON] iter " << step << "/" << max_newton_iter
+                  << ": residual_norm " << residual_norm
+                  << " tol: " << newton_tol << std::endl;
         if (residual_norm < newton_tol || step == max_newton_iter)
         {
             return true;
@@ -70,25 +72,29 @@ bool DiscreteShell::advanceOneStep(int step)
     }
 }
 
-bool DiscreteShell::linearSolve(StiffnessMatrix& K, const VectorXT& residual, VectorXT& du)
+bool DiscreteShell::linearSolve(StiffnessMatrix& K, const VectorXT& residual,
+                                VectorXT& du)
 {
     START_TIMING(LinearSolve)
     Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
-    
+
     T alpha = 1e-6;
     if (!dynamics)
     {
         StiffnessMatrix H(K.rows(), K.cols());
-        H.setIdentity(); H.diagonal().array() = 1e-10;
+        H.setIdentity();
+        H.diagonal().array() = 1e-10;
         K += H;
     }
     solver.analyzePattern(K);
     // T time_analyze = t.elapsed_sec();
-    // std::cout << "\t analyzePattern takes " << time_analyze << "s" << std::endl;
+    // std::cout << "\t analyzePattern takes " << time_analyze << "s" <<
+    // std::endl;
 
     // std::cout << K << std::endl;
-    
-    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+
+    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0,
+        invalid_residual_cnt = 0;
     int i = 0;
     T dot_dx_g = 0.0;
     for (; i < 50; i++)
@@ -104,7 +110,7 @@ bool DiscreteShell::linearSolve(StiffnessMatrix& K, const VectorXT& residual, Ve
         }
 
         du = solver.solve(residual);
-        
+
         dot_dx_g = du.normalized().dot(residual.normalized());
 
         int num_negative_eigen_values = 0;
@@ -113,32 +119,36 @@ bool DiscreteShell::linearSolve(StiffnessMatrix& K, const VectorXT& residual, Ve
         bool positive_definte = num_negative_eigen_values == 0;
         bool search_dir_correct_sign = dot_dx_g > 1e-6;
         if (!search_dir_correct_sign)
-        {   
+        {
             invalid_search_dir_cnt++;
         }
-        
+
         // bool solve_success = true;
-        // bool solve_success = (K * du - residual).norm() / residual.norm() < 1e-6;
+        // bool solve_success = (K * du - residual).norm() / residual.norm() <
+        // 1e-6;
         bool solve_success = du.norm() < 1e3;
-        
+
         if (!solve_success)
             invalid_residual_cnt++;
-        // std::cout << "PD: " << positive_definte << " direction " 
-        //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
+        // std::cout << "PD: " << positive_definte << " direction "
+        //     << search_dir_correct_sign << " solve " << solve_success <<
+        //     std::endl;
 
         if (positive_definte && search_dir_correct_sign && solve_success)
         {
-            
+
             if (verbose)
             {
                 std::cout << "\t===== Linear Solve ===== " << std::endl;
                 std::cout << "\tnnz: " << K.nonZeros() << std::endl;
-                // std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
-                std::cout << "\t# regularization step " << i 
-                    << " indefinite " << indefinite_count_reg_cnt 
-                    << " invalid search dir " << invalid_search_dir_cnt
-                    << " invalid solve " << invalid_residual_cnt << std::endl;
-                std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+                // std::cout << "\t takes " << t.elapsed_sec() << "s" <<
+                // std::endl;
+                std::cout << "\t# regularization step " << i << " indefinite "
+                          << indefinite_count_reg_cnt << " invalid search dir "
+                          << invalid_search_dir_cnt << " invalid solve "
+                          << invalid_residual_cnt << std::endl;
+                std::cout << "\tdot(search, -gradient) " << dot_dx_g
+                          << std::endl;
                 std::cout << "\t======================== " << std::endl;
                 FINISH_TIMING_PRINT(LinearSolve)
             }
@@ -155,10 +165,10 @@ bool DiscreteShell::linearSolve(StiffnessMatrix& K, const VectorXT& residual, Ve
         std::cout << "\t===== Linear Solve ===== " << std::endl;
         std::cout << "\tnnz: " << K.nonZeros() << std::endl;
         // std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
-        std::cout << "\t# regularization step " << i 
-            << " indefinite " << indefinite_count_reg_cnt 
-            << " invalid search dir " << invalid_search_dir_cnt
-            << " invalid solve " << invalid_residual_cnt << std::endl;
+        std::cout << "\t# regularization step " << i << " indefinite "
+                  << indefinite_count_reg_cnt << " invalid search dir "
+                  << invalid_search_dir_cnt << " invalid solve "
+                  << invalid_residual_cnt << std::endl;
         std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
         std::cout << "\t======================== " << std::endl;
         FINISH_TIMING_PRINT(LinearSolve)
@@ -191,24 +201,26 @@ T DiscreteShell::computeResidual(VectorXT& residual)
 
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
-        {
-            residual[offset] = 0;
-        });
+                            { residual[offset] = 0; });
     return residual.norm();
 }
 
-void DiscreteShell::computeLinearModes(MatrixXT& eigen_vectors, VectorXT& eigen_values)
+void DiscreteShell::computeLinearModes(MatrixXT& eigen_vectors,
+                                       VectorXT& eigen_values)
 {
     int nmodes = 10;
     StiffnessMatrix K;
     run_diff_test = true;
+    bool dynamics_backup = dynamics;
+    dynamics = false;
     buildSystemMatrix(K);
+    dynamics = dynamics_backup;
     run_diff_test = false;
     Spectra::SparseSymShiftSolve<T, Eigen::Lower> op(K);
-    
+
     T shift = -1e-4;
-    Spectra::SymEigsShiftSolver<Spectra::SparseSymShiftSolve<T, Eigen::Lower>> 
-            eigs(op, nmodes, 2 * nmodes, shift);
+    Spectra::SymEigsShiftSolver<Spectra::SparseSymShiftSolve<T, Eigen::Lower>>
+        eigs(op, nmodes, 2 * nmodes, shift);
 
     eigs.init();
 
@@ -218,20 +230,23 @@ void DiscreteShell::computeLinearModes(MatrixXT& eigen_vectors, VectorXT& eigen_
     {
         eigen_vectors = eigs.eigenvectors().real();
         eigen_values = eigs.eigenvalues().real();
+
+        std::cout << "eigen values " << eigen_values.transpose() << std::endl;
     }
 
     MatrixXT tmp_vec = eigen_vectors;
     VectorXT tmp_val = eigen_values;
     for (int i = 0; i < nmodes; i++)
     {
-        eigen_vectors.col(i) = tmp_vec.col(nmodes-i-1);
-        eigen_values[i] = tmp_val[nmodes-i-1];
+        eigen_vectors.col(i) = tmp_vec.col(nmodes - i - 1);
+        eigen_values[i] = tmp_val[nmodes - i - 1];
     }
-    
 }
 
 void DiscreteShell::buildSystemMatrix(StiffnessMatrix& K)
 {
+    int n_dof = deformed.rows();
+
     deformed = undeformed + u;
     std::vector<Entry> entries;
     addShellHessianEntries(entries);
@@ -239,16 +254,16 @@ void DiscreteShell::buildSystemMatrix(StiffnessMatrix& K)
         addShellGravitionHessianEntry(entries);
     if (dynamics)
         addInertialHessianEntries(entries);
-    int n_dof = deformed.rows();
     K.resize(n_dof, n_dof);
     K.setFromTriplets(entries.begin(), entries.end());
+
     if (!run_diff_test)
         projectDirichletDoFMatrix(K, dirichlet_data);
-    
     K.makeCompressed();
 }
 
-void DiscreteShell::projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data)
+void DiscreteShell::projectDirichletDoFMatrix(
+    StiffnessMatrix& A, const std::unordered_map<int, T>& data)
 {
     for (auto iter : data)
     {
@@ -276,7 +291,7 @@ T DiscreteShell::lineSearchNewton(const VectorXT& residual)
     T norm = du.norm();
     if (verbose)
         std::cout << "\t|du | " << norm << std::endl;
-    
+
     T E0 = computeTotalEnergy();
     // std::cout << "obj: " << E0 << std::endl;
     T alpha = 1.0;
@@ -289,7 +304,8 @@ T DiscreteShell::lineSearchNewton(const VectorXT& residual)
         if (E1 - E0 < 0 || cnt > 10)
         {
             // if (cnt > 10)
-                // std::cout << "cnt > 10" << " |du| " << norm << " |g| " << residual.norm() << std::endl;
+            // std::cout << "cnt > 10" << " |du| " << norm << " |g| " <<
+            // residual.norm() << std::endl;
             break;
         }
         alpha *= 0.5;
@@ -299,9 +315,51 @@ T DiscreteShell::lineSearchNewton(const VectorXT& residual)
     return alpha * du.norm();
 }
 
-void DiscreteShell::initializeFromFile(const std::string& filename)
+void DiscreteShell::initializeNonManifoldExampleScene(
+    const std::string& filename)
 {
-    MatrixXT V; MatrixXi F;
+    gravity[1] = 9.8;
+    MatrixXT V;
+    MatrixXi F;
+    igl::readOBJ(filename, V, F);
+
+    TV min_corner = V.colwise().minCoeff();
+    TV max_corner = V.colwise().maxCoeff();
+
+    T bb_diag = (max_corner - min_corner).norm();
+
+    V *= 1.0 / bb_diag;
+
+    V *= 0.5;
+
+    igl::per_face_normals(V, F, face_normals);
+
+    iglMatrixFatten<T, 3>(V, undeformed);
+    iglMatrixFatten<int, 3>(F, faces);
+    deformed = undeformed;
+    u = VectorXT::Zero(deformed.rows());
+    external_force = VectorXT::Zero(deformed.rows());
+
+    buildHingeStructure();
+    dynamics = true;
+    add_gravity = true;
+    use_consistent_mass_matrix = true;
+    // E = 0.0;
+    dt = 1.0 / 30.0;
+    simulation_duration = 10000;
+
+    hinge_stiffness.setConstant(10);
+    if (dynamics)
+    {
+        initializeDynamicStates();
+    }
+}
+
+void DiscreteShell::initializeDynamicExampleScene(const std::string& filename)
+{
+    gravity[1] = 9.8;
+    MatrixXT V;
+    MatrixXi F;
     igl::readOBJ(filename, V, F);
 
     TV min_corner = V.colwise().minCoeff();
@@ -316,18 +374,26 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
     auto rotationMatrixFromEulerAngle = [](T angle_z, T angle_y, T angle_x)
     {
         Eigen::Matrix3d R, yaw, pitch, roll;
-        yaw.setZero(); pitch.setZero(); roll.setZero();
-        yaw(0, 0) = cos(angle_z);	yaw(0, 1) = -sin(angle_z);
-        yaw(1, 0) = sin(angle_z);	yaw(1, 1) = cos(angle_z);
+        yaw.setZero();
+        pitch.setZero();
+        roll.setZero();
+        yaw(0, 0) = cos(angle_z);
+        yaw(0, 1) = -sin(angle_z);
+        yaw(1, 0) = sin(angle_z);
+        yaw(1, 1) = cos(angle_z);
         yaw(2, 2) = 1.0;
-        //y rotation
-        pitch(0, 0) = cos(angle_y); pitch(0, 2) = sin(angle_y);
+        // y rotation
+        pitch(0, 0) = cos(angle_y);
+        pitch(0, 2) = sin(angle_y);
         pitch(1, 1) = 1.0;
-        pitch(2, 0) = -sin(angle_y); pitch(2, 2) = cos(angle_y);
-        //x rotation
+        pitch(2, 0) = -sin(angle_y);
+        pitch(2, 2) = cos(angle_y);
+        // x rotation
         roll(0, 0) = 1.0;
-        roll(1, 1) = cos(angle_x); roll(1, 2) = -sin(angle_x);
-        roll(2, 1) = sin(angle_x); roll(2, 2) = cos(angle_x);
+        roll(1, 1) = cos(angle_x);
+        roll(1, 2) = -sin(angle_x);
+        roll(2, 1) = sin(angle_x);
+        roll(2, 2) = cos(angle_x);
         R = yaw * pitch * roll;
         return R;
     };
@@ -337,7 +403,7 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
     // {
     //     V.row(i) = (R * V.row(i).transpose()).transpose();
     // }
-    
+    igl::per_face_normals(V, F, face_normals);
 
     iglMatrixFatten<T, 3>(V, undeformed);
     iglMatrixFatten<int, 3>(F, faces);
@@ -348,152 +414,434 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
     buildHingeStructure();
     dynamics = true;
     add_gravity = true;
-    use_consistent_mass_matrix = false;
+    use_consistent_mass_matrix = true;
     // E = 0.0;
     dt = 1.0 / 30.0;
-    simulation_duration = 1000000;
-    
+    simulation_duration = 10000;
+
     hinge_stiffness.setConstant(10);
     if (dynamics)
     {
         initializeDynamicStates();
     }
-    
+
+    for (int j = 80; j < 100; j++)
+    {
+        for (int d = 0; d < 3; d++)
+        {
+            dirichlet_data[j * 3 + d] = 0;
+        }
+    }
+}
+
+void DiscreteShell::initializeFromFile(const std::string& filename)
+{
+    MatrixXT V;
+    MatrixXi F;
+    igl::readOBJ(filename, V, F);
+
+    TV min_corner = V.colwise().minCoeff();
+    TV max_corner = V.colwise().maxCoeff();
+
+    T bb_diag = (max_corner - min_corner).norm();
+
+    V *= 1.0 / bb_diag;
+
+    V *= 0.5;
+
+    auto rotationMatrixFromEulerAngle = [](T angle_z, T angle_y, T angle_x)
+    {
+        Eigen::Matrix3d R, yaw, pitch, roll;
+        yaw.setZero();
+        pitch.setZero();
+        roll.setZero();
+        yaw(0, 0) = cos(angle_z);
+        yaw(0, 1) = -sin(angle_z);
+        yaw(1, 0) = sin(angle_z);
+        yaw(1, 1) = cos(angle_z);
+        yaw(2, 2) = 1.0;
+        // y rotation
+        pitch(0, 0) = cos(angle_y);
+        pitch(0, 2) = sin(angle_y);
+        pitch(1, 1) = 1.0;
+        pitch(2, 0) = -sin(angle_y);
+        pitch(2, 2) = cos(angle_y);
+        // x rotation
+        roll(0, 0) = 1.0;
+        roll(1, 1) = cos(angle_x);
+        roll(1, 2) = -sin(angle_x);
+        roll(2, 1) = sin(angle_x);
+        roll(2, 2) = cos(angle_x);
+        R = yaw * pitch * roll;
+        return R;
+    };
+
+    // TM R = rotationMatrixFromEulerAngle(0, 0, M_PI_2);
+    // for (int i = 0; i < V.rows(); i++)
+    // {
+    //     V.row(i) = (R * V.row(i).transpose()).transpose();
+    // }
+    igl::per_face_normals(V, F, face_normals);
+
+    iglMatrixFatten<T, 3>(V, undeformed);
+    iglMatrixFatten<int, 3>(F, faces);
+    deformed = undeformed;
+    u = VectorXT::Zero(deformed.rows());
+    external_force = VectorXT::Zero(deformed.rows());
+    // external_force[5 * 3 + 2] = -10.0;
+    buildHingeStructure();
+    dynamics = true;
+    add_gravity = true;
+    use_consistent_mass_matrix = true;
+    // E = 0.0;
+    dt = 1.0 / 30.0;
+    simulation_duration = 10000;
+
+    hinge_stiffness.setConstant(10);
+    if (dynamics)
+    {
+        initializeDynamicStates();
+    }
 }
 
 void DiscreteShell::buildHingeStructure()
 {
-    struct Hinge
-	{
-		Hinge()
-		{
-			for (int i = 0; i < 2; i++)
-			{
-				edge[i] = -1;
-				flaps[i] = -1;
-				tris[i] = -1;
-			}
-		}
-		int edge[2];
-		int flaps[2];
-		int tris[2];
-	};
-	
-	std::vector<Hinge> hinges_temp;
-	
-	hinges_temp.clear();
-	std::map<std::pair<int, int>, int> edge2index;
-	for (int i = 0; i < faces.size() / 3; i++)
-	{
-		for (int j = 0; j < 3; j++)
-		{
-			int i1 = faces(3 * i + j);
-			int i2 = faces(3 * i + (j + 1) % 3);
-			int i1t = i1;
-			int i2t = i2;
-			bool swapped = false;
-			if (i1t > i2t)
-			{
-				std::swap(i1t, i2t);
-				swapped = true;
-			}
-			
-			auto ei = std::make_pair(i1t, i2t);
-			auto ite = edge2index.find(ei);
-			if (ite == edge2index.end())
-			{
-				//insert new hinge
-				edge2index[ei] = hinges_temp.size();
-				hinges_temp.push_back(Hinge());
-				Hinge& hinge = hinges_temp.back();
-				hinge.edge[0] = i1t;
-				hinge.edge[1] = i2t;
-				int itmp = swapped ? 1 : 0;
-				hinge.tris[itmp] = i;
-				hinge.flaps[itmp] = faces(3 * i + (j + 2) % 3);
-			}
-			else
-			{
-				//hinge for this edge already exists, add missing information for this triangle
-				Hinge& hinge = hinges_temp[ite->second];
-				int itmp = swapped ? 1 : 0;
-				hinge.tris[itmp] = i;
-				hinge.flaps[itmp] = faces(3 * i + (j + 2) % 3);
-			}
-		}
-	}
-	//ordering for edges
-	
-	hinges.resize(hinges_temp.size(), Eigen::NoChange);
-	int ii = 0;
-	/*
-      auto diff code takes
-           x3
-         /   \
-        x2---x1
-         \   /
-           x0	
+    // For each edge occurrence we record:
+    //  - the triangle index (tri)
+    //  - the vertex opposite to the edge (flap)
+    //  - whether the edge’s vertices had to be swapped (swapped)
+    struct Occurrence
+    {
+        int tri;
+        int flap;
+        bool swapped;
+    };
 
-      hinge is 
-           x2
-         /   \
-        x0---x1
-         \   /
-           x3	
-    */
-    for(Hinge & hinge : hinges_temp) {
-		if ((hinge.tris[0] == -1) || (hinge.tris[1] == -1)) {
-			continue; //skip boundary edges
-		}
-		hinges(ii, 2) = hinge.edge[0]; //x0
-		hinges(ii, 1) = hinge.edge[1]; //x1
-		hinges(ii, 3) = hinge.flaps[0]; //x2
-		hinges(ii, 0) = hinge.flaps[1]; //x3
-		++ii;
-	}
-	hinges.conservativeResize(ii, Eigen::NoChange);
+    // Use a map from a canonical edge (ordered pair) to all occurrences
+    typedef std::pair<int, int> EdgeKey;
+    std::map<EdgeKey, std::vector<Occurrence>> edgeOccurrences;
+
+    // Loop over all faces and their edges.
+    // For each face, the flap is the third vertex (not part of the edge).
+    for (int i = 0; i < faces.size() / 3; i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            int i1 = faces(3 * i + j);
+            int i2 = faces(3 * i + (j + 1) % 3);
+
+            // Create a canonical ordering for the edge
+            int i1t = i1, i2t = i2;
+            bool swapped = false;
+            if (i1t > i2t)
+            {
+                std::swap(i1t, i2t);
+                swapped = true;
+            }
+            EdgeKey key(i1t, i2t);
+
+            // The flap is the third vertex of the triangle.
+            int flap = faces(3 * i + (j + 2) % 3);
+            edgeOccurrences[key].push_back({i, flap, swapped});
+        }
+    }
+
+    // Now, for each edge with at least two adjacent faces,
+    // create a hinge for every pair of faces sharing that edge.
+    struct Hinge
+    {
+        int edge[2];
+        int flaps[2];
+        int tris[2];
+    };
+    std::vector<Hinge> hinges_temp;
+    for (auto& entry : edgeOccurrences)
+    {
+        const EdgeKey& edge = entry.first;
+        std::vector<Occurrence>& occList = entry.second;
+        if (occList.size() < 2)
+            continue; // skip boundary edges
+
+        // Create a hinge for every distinct pair of occurrences
+        for (size_t a = 0; a < occList.size(); a++)
+        {
+            for (size_t b = a + 1; b < occList.size(); b++)
+            {
+                Occurrence occA = occList[a];
+                Occurrence occB = occList[b];
+                Hinge hinge;
+                hinge.edge[0] = edge.first;
+                hinge.edge[1] = edge.second;
+
+                // We want to store the two faces in two “slots” (0 and 1)
+                // similar to the original code. In the original code, if the
+                // face did not require swapping it went into slot 0,
+                // otherwise into slot 1.
+                // Here, if the two occurrences disagree (one swapped and one
+                // not), we put the non‐swapped one in slot 0. If they are the
+                // same, we order them by triangle index.
+                if (occA.swapped != occB.swapped)
+                {
+                    if (!occA.swapped)
+                    {
+                        hinge.tris[0] = occA.tri;
+                        hinge.flaps[0] = occA.flap;
+                        hinge.tris[1] = occB.tri;
+                        hinge.flaps[1] = occB.flap;
+                    }
+                    else
+                    {
+                        hinge.tris[0] = occB.tri;
+                        hinge.flaps[0] = occB.flap;
+                        hinge.tris[1] = occA.tri;
+                        hinge.flaps[1] = occA.flap;
+                    }
+                }
+                else
+                {
+                    // Both have the same flag; order by triangle index.
+                    if (occA.tri < occB.tri)
+                    {
+                        hinge.tris[0] = occA.tri;
+                        hinge.flaps[0] = occA.flap;
+                        hinge.tris[1] = occB.tri;
+                        hinge.flaps[1] = occB.flap;
+                    }
+                    else
+                    {
+                        hinge.tris[0] = occB.tri;
+                        hinge.flaps[0] = occB.flap;
+                        hinge.tris[1] = occA.tri;
+                        hinge.flaps[1] = occA.flap;
+                    }
+                }
+                hinges_temp.push_back(hinge);
+            }
+        }
+    }
+
+    // Build the final hinges data structure.
+    // The original code creates a matrix with four columns.
+    // Here we adopt the same column ordering:
+    //   column 2 <- hinge.edge[0] (x0)
+    //   column 1 <- hinge.edge[1] (x1)
+    //   column 3 <- hinge.flaps[0] (x2)
+    //   column 0 <- hinge.flaps[1] (x3)
+    hinges.resize(hinges_temp.size(), Eigen::NoChange);
+    int ii = 0;
+    for (const Hinge& hinge : hinges_temp)
+    {
+        hinges(ii, 2) = hinge.edge[0];  // x0
+        hinges(ii, 1) = hinge.edge[1];  // x1
+        hinges(ii, 3) = hinge.flaps[0]; // x2
+        hinges(ii, 0) = hinge.flaps[1]; // x3
+        ++ii;
+    }
+    hinges.conservativeResize(ii, Eigen::NoChange);
+
     hinge_stiffness.resize(hinges.rows());
     hinge_stiffness.setOnes();
 }
 
+// void DiscreteShell::buildHingeStructure()
+// {
+//     struct Hinge
+// 	{
+// 		Hinge()
+// 		{
+// 			for (int i = 0; i < 2; i++)
+// 			{
+// 				edge[i] = -1;
+// 				flaps[i] = -1;
+// 				tris[i] = -1;
+// 			}
+// 		}
+// 		int edge[2];
+// 		int flaps[2];
+// 		int tris[2];
+// 	};
+
+// 	std::vector<Hinge> hinges_temp;
+
+// 	hinges_temp.clear();
+// 	std::map<std::pair<int, int>, int> edge2index;
+// 	for (int i = 0; i < faces.size() / 3; i++)
+// 	{
+// 		for (int j = 0; j < 3; j++)
+// 		{
+// 			int i1 = faces(3 * i + j);
+// 			int i2 = faces(3 * i + (j + 1) % 3);
+// 			int i1t = i1;
+// 			int i2t = i2;
+// 			bool swapped = false;
+// 			if (i1t > i2t)
+// 			{
+// 				std::swap(i1t, i2t);
+// 				swapped = true;
+// 			}
+
+// 			auto ei = std::make_pair(i1t, i2t);
+// 			auto ite = edge2index.find(ei);
+// 			if (ite == edge2index.end())
+// 			{
+// 				//insert new hinge
+// 				edge2index[ei] = hinges_temp.size();
+// 				hinges_temp.push_back(Hinge());
+// 				Hinge& hinge = hinges_temp.back();
+// 				hinge.edge[0] = i1t;
+// 				hinge.edge[1] = i2t;
+// 				int itmp = swapped ? 1 : 0;
+// 				hinge.tris[itmp] = i;
+// 				hinge.flaps[itmp] = faces(3 * i + (j + 2) % 3);
+// 			}
+// 			else
+// 			{
+// 				//hinge for this edge already exists, add missing information
+// for this triangle 				Hinge& hinge = hinges_temp[ite->second];
+// int itmp = swapped ? 1 : 0; 				hinge.tris[itmp] = i;
+// hinge.flaps[itmp] = faces(3 * i + (j + 2) % 3);
+// 			}
+// 		}
+// 	}
+// 	//ordering for edges
+
+// 	hinges.resize(hinges_temp.size(), Eigen::NoChange);
+// 	int ii = 0;
+// 	/*
+//       auto diff code takes
+//            x3
+//          /   \
+//         x2---x1
+//          \   /
+//            x0
+
+//       hinge is
+//            x2
+//          /   \
+//         x0---x1
+//          \   /
+//            x3
+//     */
+//     for(Hinge & hinge : hinges_temp) {
+// 		if ((hinge.tris[0] == -1) || (hinge.tris[1] == -1)) {
+// 			continue; //skip boundary edges
+// 		}
+// 		hinges(ii, 2) = hinge.edge[0]; //x0
+// 		hinges(ii, 1) = hinge.edge[1]; //x1
+// 		hinges(ii, 3) = hinge.flaps[0]; //x2
+// 		hinges(ii, 0) = hinge.flaps[1]; //x3
+// 		++ii;
+// 	}
+// 	hinges.conservativeResize(ii, Eigen::NoChange);
+//     hinge_stiffness.resize(hinges.rows());
+//     hinge_stiffness.setOnes();
+// }
+
 void DiscreteShell::addShellInplaneEnergy(T& energy)
 {
-    iterateFaceSerial([&](int face_idx)
-    {
-        FaceVtx vertices = getFaceVtxDeformed(face_idx);
-        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+    iterateFaceSerial(
+        [&](int face_idx)
+        {
+            FaceVtx vertices = getFaceVtxDeformed(face_idx);
+            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
 
-        FaceIdx indices = faces.segment<3>(face_idx * 3);
-        
-        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
-        TV X0 = undeformed_vertices.row(0); 
-        TV X1 = undeformed_vertices.row(1); 
-        TV X2 = undeformed_vertices.row(2);
+            FaceIdx indices = faces.segment<3>(face_idx * 3);
 
-        T k_s = E * thickness / (1.0 - nu * nu);
+            TV x0 = vertices.row(0);
+            TV x1 = vertices.row(1);
+            TV x2 = vertices.row(2);
+            TV X0 = undeformed_vertices.row(0);
+            TV X1 = undeformed_vertices.row(1);
+            TV X2 = undeformed_vertices.row(2);
 
-        energy += compute3DCSTShellEnergy(nu, k_s, x0, x1, x2, X0, X1, X2);
+            T k_s = E * thickness / (1.0 - nu * nu);
 
-        
-    });
+            energy += compute3DCSTShellEnergy(nu, k_s, x0, x1, x2, X0, X1, X2);
+        });
 }
 
 void DiscreteShell::addShellBendingEnergy(T& energy)
 {
-    iterateHingeSerial([&](const HingeIdx& hinge_idx, int hinge_cnt){
-        
-        HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
-        HingeVtx undeformed_vertices = getHingeVtxUndeformed(hinge_idx);
+    iterateHingeSerial(
+        [&](const HingeIdx& hinge_idx, int hinge_cnt)
+        {
+            HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
+            HingeVtx undeformed_vertices = getHingeVtxUndeformed(hinge_idx);
 
+            T k_bend = hinge_stiffness[hinge_cnt] * E * std::pow(thickness, 3) /
+                       (24 * (1.0 - std::pow(nu, 2)));
 
-        T k_bend = hinge_stiffness[hinge_cnt] * E * std::pow(thickness, 3) / (24 * (1.0 - std::pow(nu, 2)));
+            TV x0 = deformed_vertices.row(0);
+            TV x1 = deformed_vertices.row(1);
+            TV x2 = deformed_vertices.row(2);
+            TV x3 = deformed_vertices.row(3);
+            TV X0 = undeformed_vertices.row(0);
+            TV X1 = undeformed_vertices.row(1);
+            TV X2 = undeformed_vertices.row(2);
+            TV X3 = undeformed_vertices.row(3);
 
-        TV x0 = deformed_vertices.row(0); TV x1 = deformed_vertices.row(1); TV x2 = deformed_vertices.row(2); TV x3 = deformed_vertices.row(3);
-        TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2); TV X3 = undeformed_vertices.row(3);
+            energy +=
+                computeDSBendingEnergy(k_bend, x0, x1, x2, x3, X0, X1, X2, X3);
+        });
+}
 
-        energy += computeDSBendingEnergy(k_bend, x0, x1, x2, x3, X0, X1, X2, X3);
+void DiscreteShell::addShellInplaneForceEntries(VectorXT& residual)
+{
 
-    });
+    iterateFaceSerial(
+        [&](int face_idx)
+        {
+            FaceVtx vertices = getFaceVtxDeformed(face_idx);
+            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+            FaceIdx indices = faces.segment<3>(face_idx * 3);
+
+            T k_s = E * thickness / (1.0 - nu * nu);
+            TV x0 = vertices.row(0);
+            TV x1 = vertices.row(1);
+            TV x2 = vertices.row(2);
+            TV X0 = undeformed_vertices.row(0);
+            TV X1 = undeformed_vertices.row(1);
+            TV X2 = undeformed_vertices.row(2);
+
+            Vector<T, 9> dedx;
+            compute3DCSTShellEnergyGradient(nu, k_s, x0, x1, x2, X0, X1, X2,
+                                            dedx);
+
+            addForceEntry<3>(residual, {indices[0], indices[1], indices[2]},
+                             -dedx);
+        });
+}
+
+void DiscreteShell::addShellBendingForceEntries(VectorXT& residual)
+{
+    iterateHingeSerial(
+        [&](const HingeIdx& hinge_idx, int hinge_cnt)
+        {
+            HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
+            HingeVtx undeformed_vertices = getHingeVtxUndeformed(hinge_idx);
+
+            T k_bend = hinge_stiffness[hinge_cnt] * E * std::pow(thickness, 3) /
+                       (24 * (1.0 - std::pow(nu, 2)));
+
+            Vector<T, 12> dedx;
+
+            TV x0 = deformed_vertices.row(0);
+            TV x1 = deformed_vertices.row(1);
+            TV x2 = deformed_vertices.row(2);
+            TV x3 = deformed_vertices.row(3);
+            TV X0 = undeformed_vertices.row(0);
+            TV X1 = undeformed_vertices.row(1);
+            TV X2 = undeformed_vertices.row(2);
+            TV X3 = undeformed_vertices.row(3);
+            T rest_angle = computeAngle(X0, X1, X2, X3) / M_PI * 180.0;
+
+            computeDSBendingEnergyGradient(k_bend, x0, x1, x2, x3, X0, X1, X2,
+                                           X3, dedx);
+            addForceEntry<3>(
+                residual,
+                {hinge_idx[0], hinge_idx[1], hinge_idx[2], hinge_idx[3]},
+                -dedx);
+        });
 }
 
 void DiscreteShell::addShellEnergy(T& energy)
@@ -501,170 +849,84 @@ void DiscreteShell::addShellEnergy(T& energy)
     T in_plane_energy = 0.0;
     T bending_energy = 0.0;
     addShellInplaneEnergy(in_plane_energy);
-    addShellBendingEnergy(bending_energy);    
+    addShellBendingEnergy(bending_energy);
 
     energy += in_plane_energy;
     energy += bending_energy;
 }
 
-void DiscreteShell::addShellInplaneForceEntries(VectorXT& residual)
-{
-
-    
-
-    auto barycentricJacobian = [&](const Eigen::Vector3d &a, const Eigen::Vector3d &b, const Eigen::Vector3d &c)
-    {
-        Eigen::Vector3d v0 = b - a, v1 = c - a;
-        //Eigen::Vector3d v2 = p - a;
-        T d00 = v0.dot(v0); // (b - a).dot(b - a) => d d00 / d p = 0
-        T d01 = v0.dot(v1); // (b - a).dot(c - a) => d d01 / d p = 0
-        T d11 = v1.dot(v1); // (c - a).dot(c - a) => d d11 / dp = 0
-        //T d20 = v2.dot(v0); // (p - a).dot(b - a) => d d20 / dp = (b - a)^T
-        //T d21 = v2.dot(v1); //  ( p - a).dot(c - a) = > d21 / dp = (c - a)^T
-        T denom = d00 * d11 - d01 * d01; // => d00 * d11 constant in => drops out, d01 constant in p => derivative is 0
-        //v = (d11 * d20 - d01 * d21) / denom;
-        //w = (d00 * d21 - d01 * d20) / denom;
-        //u = 1.0f - v - w;
-        //Eigen::Vector3d dvdp = (d11 * dd20 / dp - d01 * d d21 / dp) / denom;
-        Eigen::Vector3d dvdp = (d11 * (b - a) - d01 * (c - a)) / denom;
-        Eigen::Vector3d dwdp = (d00 * (c - a) - d01 * (b - a)) / denom;
-        Matrix<T, 2, 3> result;
-        result.row(0) = dvdp.transpose();
-        result.row(1) = dwdp.transpose();
-        return result;
-    };
-
-    auto compute3DCSTDeformationGradient = [&](const Eigen::Vector3d &x1Undef, const Eigen::Vector3d &x2Undef, const Eigen::Vector3d &x3Undef,
-        const Eigen::Vector3d &x1, const Eigen::Vector3d &x2, const Eigen::Vector3d &x3
-    )
-    {
-        // defGrad = d x / d X
-        // X(b) = X * N(b) = X * [ 1 - b1 - b2; b1; b2];
-        // b(X) = [X2 - X1, X3 - X1]^-1 [X - X1]
-        // x(X) = x * N(b(X)) then take the jacobian of this to get defgrad
-        // d x / d X = x * d N / dX = x * dN/db * [X2 - X1, X3 - X1]^-1;
-        // however here X means a 2 dimensional vector! so we get a 3x2 defgrad
-        // x(X) = x * N(Barycentric(X, X1, X2, X3))
-        // defGrad = dx / d X = x * dN/dB * dB /dX
-        // that would work except that the defGradient is gonna be 3x3 and in the undef config. something like [1, 0, 0;0,0,0;0,0,1];
-        // and then E = 0.5 * (F^T F - I)  is gonna give a non zero energy in the undef config.
-        //instead we choose a 2D coordinate system X* in the undef configuration for which we compute the def grad
-        // defGrad = d x / d X*
-        // x(X*) = x * N(Barycentric(X(X*)));
-        // X(X*) = X1 + t * X*[0] + q *X*[1]
-
-        Eigen::Vector3d tUndef = (x2Undef - x1Undef).normalized();
-        Eigen::Vector3d e2Undef = (x3Undef - x1Undef);
-        Eigen::Vector3d qUndef = (e2Undef - tUndef * e2Undef.dot(tUndef)).normalized();
-
-        Eigen::Matrix3d x;
-        x << x1, x2, x3;
-
-        //N(b) = [1 - b1 - b2, b1, b2]
-        Matrix<T, 3, 2> dNdb;
-        dNdb << -1.0, -1.0,
-            1.0, 0.0,
-            0.0, 1.0;
-
-        Matrix<T, 2, 3> dBdX = barycentricJacobian(x1Undef, x2Undef, x3Undef);
-        Matrix<T, 3, 2> dXdXStar;
-        dXdXStar << tUndef, qUndef;
-        Matrix<T, 3, 2> defGrad = x * dNdb * dBdX * dXdXStar; //note that this F is not very intuitive it can contain -1 for undef configuration, but its not a problem as long as only F^T*F is used
-        return defGrad;
-    };
-
-    iterateFaceSerial([&](int face_idx)
-    {
-        FaceVtx vertices = getFaceVtxDeformed(face_idx);
-        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
-        FaceIdx indices = faces.segment<3>(face_idx * 3);
-
-        T k_s = E * thickness / (1.0 - nu * nu);
-        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
-        TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
-    
-
-        Vector<T, 9> dedx;
-        compute3DCSTShellEnergyGradient(nu, k_s, x0, x1, x2, X0, X1, X2, dedx);
-        
-        addForceEntry<3>(residual, {indices[0], indices[1], indices[2]}, -dedx);
-    });
-}
-
-void DiscreteShell::addShellBendingForceEntries(VectorXT& residual)
-{
-    iterateHingeSerial([&](const HingeIdx& hinge_idx, int hinge_cnt){
-                
-        HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
-        HingeVtx undeformed_vertices = getHingeVtxUndeformed(hinge_idx);
-
-
-        T k_bend = hinge_stiffness[hinge_cnt] * E * std::pow(thickness, 3) / (24 * (1.0 - std::pow(nu, 2)));
-
-        Vector<T, 12> dedx;
-        
-        TV x0 = deformed_vertices.row(0); TV x1 = deformed_vertices.row(1); TV x2 = deformed_vertices.row(2); TV x3 = deformed_vertices.row(3);
-        TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2); TV X3 = undeformed_vertices.row(3);
-
-        computeDSBendingEnergyGradient(k_bend, x0, x1, x2, x3, X0, X1, X2, X3, dedx);
-        addForceEntry<3>(residual, 
-            {hinge_idx[0], hinge_idx[1], hinge_idx[2], hinge_idx[3]}, -dedx);
-    });
-}
 void DiscreteShell::addShellForceEntry(VectorXT& residual)
 {
     addShellInplaneForceEntries(residual);
     addShellBendingForceEntries(residual);
 }
 
-void DiscreteShell::addShellInplaneHessianEntries(std::vector<Entry>& entries)
-{
-    iterateFaceSerial([&](int face_idx)
-    {
-        FaceVtx vertices = getFaceVtxDeformed(face_idx);
-        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
-
-        FaceIdx indices = faces.segment<3>(face_idx * 3);
-
-        T k_s = E * thickness / (1.0 - nu * nu);
-
-        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
-        TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
-
-        Matrix<T, 9, 9> hessian;
-        compute3DCSTShellEnergyHessian(nu, k_s, x0, x1, x2, X0, X1, X2, hessian);
-
-
-        addHessianEntry<3, 3>(entries, {indices[0], indices[1], indices[2]}, hessian);
-
-    });
-}
-
-void DiscreteShell::addShellBendingHessianEntries(std::vector<Entry>& entries)
-{
-    iterateHingeSerial([&](const HingeIdx& hinge_idx, int hinge_cnt){
-        
-        HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
-        HingeVtx undeformed_vertices = getHingeVtxUndeformed(hinge_idx);
-
-        T k_bend = hinge_stiffness[hinge_cnt] * E * std::pow(thickness, 3) / (24 * (1.0 - std::pow(nu, 2)));
-        
-        Matrix<T, 12, 12> hess;
-        TV x0 = deformed_vertices.row(0); TV x1 = deformed_vertices.row(1); TV x2 = deformed_vertices.row(2); TV x3 = deformed_vertices.row(3);
-        TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2); TV X3 = undeformed_vertices.row(3);
-
-        computeDSBendingEnergyHessian(k_bend, x0, x1, x2, x3, X0, X1, X2, X3, hess);
-        addHessianEntry<3, 3>(entries, 
-                            {hinge_idx[0], hinge_idx[1], hinge_idx[2], hinge_idx[3]}, 
-                            hess);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
-
-    });
-}
-
 void DiscreteShell::addShellHessianEntries(std::vector<Entry>& entries)
 {
     addShellInplaneHessianEntries(entries);
     addShellBendingHessianEntries(entries);
+}
+
+void DiscreteShell::addShellInplaneHessianEntries(std::vector<Entry>& entries)
+{
+    iterateFaceSerial(
+        [&](int face_idx)
+        {
+            FaceVtx vertices = getFaceVtxDeformed(face_idx);
+            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+
+            FaceIdx indices = faces.segment<3>(face_idx * 3);
+
+            T k_s = E * thickness / (1.0 - nu * nu);
+
+            TV x0 = vertices.row(0);
+            TV x1 = vertices.row(1);
+            TV x2 = vertices.row(2);
+            TV X0 = undeformed_vertices.row(0);
+            TV X1 = undeformed_vertices.row(1);
+            TV X2 = undeformed_vertices.row(2);
+
+            Matrix<T, 9, 9> hessian;
+            compute3DCSTShellEnergyHessian(nu, k_s, x0, x1, x2, X0, X1, X2,
+                                           hessian);
+
+            addHessianEntry<3, 3>(entries, {indices[0], indices[1], indices[2]},
+                                  hessian);
+        });
+}
+
+void DiscreteShell::addShellBendingHessianEntries(std::vector<Entry>& entries)
+{
+    iterateHingeSerial(
+        [&](const HingeIdx& hinge_idx, int hinge_cnt)
+        {
+            HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
+            HingeVtx undeformed_vertices = getHingeVtxUndeformed(hinge_idx);
+
+            T k_bend = hinge_stiffness[hinge_cnt] * E * std::pow(thickness, 3) /
+                       (24 * (1.0 - std::pow(nu, 2)));
+
+            Matrix<T, 12, 12> hess;
+            TV x0 = deformed_vertices.row(0);
+            TV x1 = deformed_vertices.row(1);
+            TV x2 = deformed_vertices.row(2);
+            TV x3 = deformed_vertices.row(3);
+            TV X0 = undeformed_vertices.row(0);
+            TV X1 = undeformed_vertices.row(1);
+            TV X2 = undeformed_vertices.row(2);
+            TV X3 = undeformed_vertices.row(3);
+
+            computeDSBendingEnergyHessian(k_bend, x0, x1, x2, x3, X0, X1, X2,
+                                          X3, hess);
+            // Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, 12, 12>>
+            // eigenSolver(
+            //     hess);
+            // std::cout << eigenSolver.eigenvalues().transpose() << std::endl;
+            // std::getchar();
+            addHessianEntry<3, 3>(
+                entries,
+                {hinge_idx[0], hinge_idx[1], hinge_idx[2], hinge_idx[3]}, hess);
+        });
 }
 
 void DiscreteShell::setHingeStiffness()
@@ -674,19 +936,22 @@ void DiscreteShell::setHingeStiffness()
     TV min_corner, max_corner;
     computeBoundingBox(min_corner, max_corner);
     TV center = 0.5 * (min_corner + max_corner);
-    iterateHingeSerial([&](const HingeIdx& hinge_idx, int hinge_cnt){
-        
-        HingeVtx undeformed_vertices = getHingeVtxUndeformed(hinge_idx);
-        TV v0 = undeformed_vertices.row(1);
-        TV v1 = undeformed_vertices.row(2);
-        bool center_v0 = v0[dir] < center[dir] + eps && v0[dir] > center[dir] - eps;
-        bool center_v1 = v1[dir] < center[dir] + eps && v1[dir] > center[dir] - eps;
-        if (center_v0 && center_v1)
+    iterateHingeSerial(
+        [&](const HingeIdx& hinge_idx, int hinge_cnt)
         {
-            hinge_stiffness[hinge_cnt] = E;
-            std::cout << "center" << std::endl;
-        }
-    });
+            HingeVtx undeformed_vertices = getHingeVtxUndeformed(hinge_idx);
+            TV v0 = undeformed_vertices.row(1);
+            TV v1 = undeformed_vertices.row(2);
+            bool center_v0 =
+                v0[dir] < center[dir] + eps && v0[dir] > center[dir] - eps;
+            bool center_v1 =
+                v1[dir] < center[dir] + eps && v1[dir] > center[dir] - eps;
+            if (center_v0 && center_v1)
+            {
+                hinge_stiffness[hinge_cnt] = E;
+                std::cout << "center" << std::endl;
+            }
+        });
 }
 
 void DiscreteShell::computeBoundingBox(TV& min_corner, TV& max_corner)
@@ -706,64 +971,73 @@ void DiscreteShell::computeBoundingBox(TV& min_corner, TV& max_corner)
 
 void DiscreteShell::addShellGravitionEnergy(T& energy)
 {
-    iterateFaceSerial([&](int face_idx)
-    {
-        FaceVtx vertices = getFaceVtxDeformed(face_idx);
-        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+    iterateFaceSerial(
+        [&](int face_idx)
+        {
+            FaceVtx vertices = getFaceVtxDeformed(face_idx);
+            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
 
-        FaceIdx indices = faces.segment<3>(face_idx * 3);
+            FaceIdx indices = faces.segment<3>(face_idx * 3);
 
-        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
-        TV X0 = undeformed_vertices.row(0); 
-        TV X1 = undeformed_vertices.row(1); 
-        TV X2 = undeformed_vertices.row(2);
+            TV x0 = vertices.row(0);
+            TV x1 = vertices.row(1);
+            TV x2 = vertices.row(2);
+            TV X0 = undeformed_vertices.row(0);
+            TV X1 = undeformed_vertices.row(1);
+            TV X2 = undeformed_vertices.row(2);
 
-        energy += compute3DCSTGravitationalEnergy(density, thickness, 
-            gravity, x0, x1, x2, X0, X1, X2);
-
-        
-    });
+            energy += compute3DCSTGravitationalEnergy(
+                density, thickness, gravity, x0, x1, x2, X0, X1, X2);
+        });
 }
 
 void DiscreteShell::addShellGravitionForceEntry(VectorXT& residual)
 {
-    iterateFaceSerial([&](int face_idx)
-    {
-        FaceVtx vertices = getFaceVtxDeformed(face_idx);
-        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+    iterateFaceSerial(
+        [&](int face_idx)
+        {
+            FaceVtx vertices = getFaceVtxDeformed(face_idx);
+            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
 
-        FaceIdx indices = faces.segment<3>(face_idx * 3);
+            FaceIdx indices = faces.segment<3>(face_idx * 3);
 
-        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
-        TV X0 = undeformed_vertices.row(0); 
-        TV X1 = undeformed_vertices.row(1); 
-        TV X2 = undeformed_vertices.row(2);
+            TV x0 = vertices.row(0);
+            TV x1 = vertices.row(1);
+            TV x2 = vertices.row(2);
+            TV X0 = undeformed_vertices.row(0);
+            TV X1 = undeformed_vertices.row(1);
+            TV X2 = undeformed_vertices.row(2);
 
-        Vector<T, 9> dedx;
-        compute3DCSTGravitationalEnergyGradient(density, thickness, gravity, x0, x1, x2, X0, X1, X2, dedx);
+            Vector<T, 9> dedx;
+            compute3DCSTGravitationalEnergyGradient(
+                density, thickness, gravity, x0, x1, x2, X0, X1, X2, dedx);
 
-        addForceEntry<3>(residual, {indices[0], indices[1], indices[2]}, -dedx);
-    });
+            addForceEntry<3>(residual, {indices[0], indices[1], indices[2]},
+                             -dedx);
+        });
 }
 
 void DiscreteShell::addShellGravitionHessianEntry(std::vector<Entry>& entries)
 {
-    iterateFaceSerial([&](int face_idx)
-    {
-        FaceVtx vertices = getFaceVtxDeformed(face_idx);
-        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+    iterateFaceSerial(
+        [&](int face_idx)
+        {
+            FaceVtx vertices = getFaceVtxDeformed(face_idx);
+            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
 
-        FaceIdx indices = faces.segment<3>(face_idx * 3);
+            FaceIdx indices = faces.segment<3>(face_idx * 3);
 
-        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
-        TV X0 = undeformed_vertices.row(0); 
-        TV X1 = undeformed_vertices.row(1); 
-        TV X2 = undeformed_vertices.row(2);
+            TV x0 = vertices.row(0);
+            TV x1 = vertices.row(1);
+            TV x2 = vertices.row(2);
+            TV X0 = undeformed_vertices.row(0);
+            TV X1 = undeformed_vertices.row(1);
+            TV X2 = undeformed_vertices.row(2);
 
-        
-        Matrix<T, 9, 9> hessian;
-        compute3DCSTGravitationalEnergyHessian(density, thickness, gravity, x0, x1, x2, X0, X1, X2, hessian);
-    });
+            Matrix<T, 9, 9> hessian;
+            compute3DCSTGravitationalEnergyHessian(
+                density, thickness, gravity, x0, x1, x2, X0, X1, X2, hessian);
+        });
 }
 
 // ============================= DERIVATIVE TESTS =============================
@@ -783,9 +1057,12 @@ void DiscreteShell::checkTotalGradient(bool perturb)
         u += du;
     }
 
-    std::cout << "======================== CHECK GRADIENT ========================" << std::endl;
-    std::cout << "****** Only mismatching entries are printed ******" << std::endl;
-    
+    std::cout
+        << "======================== CHECK GRADIENT ========================"
+        << std::endl;
+    std::cout << "****** Only mismatching entries are printed ******"
+              << std::endl;
+
     T epsilon = 1e-6;
     VectorXT gradient(n_dof);
     gradient.setZero();
@@ -793,29 +1070,31 @@ void DiscreteShell::checkTotalGradient(bool perturb)
     computeResidual(gradient);
 
     // std::cout << gradient.transpose() << std::endl;
-    
+
     VectorXT gradient_FD(n_dof);
     gradient_FD.setZero();
 
     int cnt = 0;
-    for(int dof_i = 0; dof_i < n_dof; dof_i++)
+    for (int dof_i = 0; dof_i < n_dof; dof_i++)
     {
         u(dof_i) += epsilon;
         // std::cout << W * dq << std::endl;
         T E0 = computeTotalEnergy();
-        
+
         u(dof_i) -= 2.0 * epsilon;
         T E1 = computeTotalEnergy();
         u(dof_i) += epsilon;
         // std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
-        gradient_FD(dof_i) = (E1 - E0) / (2.0 *epsilon);
-        if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
+        gradient_FD(dof_i) = (E1 - E0) / (2.0 * epsilon);
+        if (gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
             continue;
-        if (std::abs( gradient_FD(dof_i) - gradient(dof_i)) < 1e-3 * std::abs(gradient(dof_i)))
+        if (std::abs(gradient_FD(dof_i) - gradient(dof_i)) <
+            1e-3 * std::abs(gradient(dof_i)))
             continue;
-        std::cout << " dof " << dof_i << " " << gradient_FD(dof_i) << " " << gradient(dof_i) << std::endl;
+        std::cout << " dof " << dof_i << " " << gradient_FD(dof_i) << " "
+                  << gradient(dof_i) << std::endl;
         std::getchar();
-        cnt++;   
+        cnt++;
     }
     std::cout << "Gradient Diff Test Finished" << std::endl;
     run_diff_test = false;
@@ -823,12 +1102,16 @@ void DiscreteShell::checkTotalGradient(bool perturb)
 
 void DiscreteShell::checkTotalGradientScale(bool perturb)
 {
-    
+
     run_diff_test = true;
-    
-    std::cout << "===================== Check Gradient Scale =====================" << std::endl;
-    std::cout << "********************You Should Be Seeing 4s********************" << std::endl;
-    
+
+    std::cout
+        << "===================== Check Gradient Scale ====================="
+        << std::endl;
+    std::cout
+        << "********************You Should Be Seeing 4s********************"
+        << std::endl;
+
     int n_dof = deformed.rows();
 
     if (perturb)
@@ -856,12 +1139,12 @@ void DiscreteShell::checkTotalGradientScale(bool perturb)
         u = u_backup + dx;
         T E1 = computeTotalEnergy();
         T dE = E1 - E0;
-        
+
         dE -= gradient.dot(dx);
         // std::cout << "dE " << dE << std::endl;
         if (i > 0)
         {
-            std::cout << (previous/dE) << std::endl;
+            std::cout << (previous / dE) << std::endl;
         }
         previous = dE;
         dx *= 0.5;
@@ -869,11 +1152,13 @@ void DiscreteShell::checkTotalGradientScale(bool perturb)
     run_diff_test = false;
 }
 
-
 void DiscreteShell::checkTotalHessian(bool perturb)
 {
-    std::cout << "======================== CHECK Hessian ========================" << std::endl;
-    std::cout << "****** Only mismatching entries are printed ******" << std::endl;
+    std::cout
+        << "======================== CHECK Hessian ========================"
+        << std::endl;
+    std::cout << "****** Only mismatching entries are printed ******"
+              << std::endl;
     run_diff_test = true;
     T epsilon = 1e-5;
     int n_dof = deformed.rows();
@@ -888,34 +1173,40 @@ void DiscreteShell::checkTotalHessian(bool perturb)
     }
     StiffnessMatrix A(n_dof, n_dof);
     buildSystemMatrix(A);
-    
-    for(int dof_i = 0; dof_i < n_dof; dof_i++)
+
+    for (int dof_i = 0; dof_i < n_dof; dof_i++)
     {
         // std::cout << dof_i << std::endl;
         u(dof_i) += epsilon;
         VectorXT g0(n_dof), g1(n_dof);
-        g0.setZero(); g1.setZero();
-        
-        computeResidual(g0); 
-        
+        g0.setZero();
+        g1.setZero();
+
+        computeResidual(g0);
+
         u(dof_i) -= 2.0 * epsilon;
-        
-        computeResidual(g1); 
-        
+
+        computeResidual(g1);
+
         u(dof_i) += epsilon;
         VectorXT row_FD = (g1 - g0) / (2.0 * epsilon);
 
-        for(int i = 0; i < n_dof; i++)
+        for (int i = 0; i < n_dof; i++)
         {
-            
-            if(A.coeff(i, dof_i) == 0 && row_FD(i) == 0)
+
+            if (A.coeff(i, dof_i) == 0 && row_FD(i) == 0)
                 continue;
-            if (std::abs( A.coeff(i, dof_i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
+            if (std::abs(A.coeff(i, dof_i) - row_FD(i)) <
+                1e-3 * std::abs(row_FD(i)))
                 continue;
-            // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
-            //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
-            //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
-            std::cout << "H(" << i << ", " << dof_i << ") " << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof "
+            // << dof_i%dof
+            //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof
+            //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i,
+            //     dof_i) << std::endl;
+            std::cout << "H(" << i << ", " << dof_i << ") "
+                      << " FD: " << row_FD(i)
+                      << " symbolic: " << A.coeff(i, dof_i) << std::endl;
             std::getchar();
         }
     }
@@ -923,13 +1214,18 @@ void DiscreteShell::checkTotalHessian(bool perturb)
     run_diff_test = false;
 }
 
-
 void DiscreteShell::checkTotalHessianScale(bool perturb)
 {
-    
-    std::cout << "===================== check Hessian Scale =====================" << std::endl;
-    std::cout << "********************You Should Be Seeing 4s********************" << std::endl;
-    std::cout << "************** Unless your function is quadratic **************" << std::endl;
+
+    std::cout
+        << "===================== check Hessian Scale ====================="
+        << std::endl;
+    std::cout
+        << "********************You Should Be Seeing 4s********************"
+        << std::endl;
+    std::cout
+        << "************** Unless your function is quadratic **************"
+        << std::endl;
     run_diff_test = true;
     int n_dof = deformed.rows();
 
@@ -941,20 +1237,21 @@ void DiscreteShell::checkTotalHessianScale(bool perturb)
         du *= 0.001;
         u += du;
     }
-    
+
     StiffnessMatrix A(n_dof, n_dof);
-    
+
     buildSystemMatrix(A);
 
     VectorXT f0(n_dof);
     f0.setZero();
     computeResidual(f0);
     f0 *= -1;
-    
+
     VectorXT dx(n_dof);
     dx.setRandom();
     dx *= 1.0 / dx.norm();
-    for(int i = 0; i < n_dof; i++) dx[i] += 0.5;
+    for (int i = 0; i < n_dof; i++)
+        dx[i] += 0.5;
     dx *= 0.001;
     T previous = 0.0;
     VectorXT u_backup = u;
@@ -969,15 +1266,15 @@ void DiscreteShell::checkTotalHessianScale(bool perturb)
         // std::cout << "df_norm " << df_norm << std::endl;
         if (i > 0)
         {
-            std::cout << (previous/df_norm) << std::endl;
+            std::cout << (previous / df_norm) << std::endl;
         }
         previous = df_norm;
         dx *= 0.5;
     }
     run_diff_test = false;
 }
-// ============================= DERIVATIVE TESTS END =============================
-
+// ============================= DERIVATIVE TESTS END
+// =============================
 
 // ============================= Dynamics =============================
 void DiscreteShell::addInertialEnergy(T& energy)
@@ -985,41 +1282,48 @@ void DiscreteShell::addInertialEnergy(T& energy)
     T kinetic_energy = 0.0;
     if (use_consistent_mass_matrix)
     {
-        iterateFaceSerial([&](int face_idx)
-        {
-            FaceVtx vertices = getFaceVtxDeformed(face_idx);
-            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
-            FaceIdx indices = faces.segment<3>(face_idx * 3);
-            Matrix<T, 9, 9> mass_mat;
-            computeConsistentMassMatrix(undeformed_vertices, mass_mat);
-            Vector<T, 9> x_n_plus_1_vec, xn_vec, vn_vec;
-            for (int i = 0; i < 3; i++)
+        iterateFaceSerial(
+            [&](int face_idx)
             {
-                x_n_plus_1_vec.segment<3>(i * 3) = vertices.row(i);
-                xn_vec.segment<3>(i * 3) = xn.segment<3>(indices[i] * 3);
-                vn_vec.segment<3>(i * 3) = vn.segment<3>(indices[i] * 3);
-            }
+                FaceVtx vertices = getFaceVtxDeformed(face_idx);
+                FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+                FaceIdx indices = faces.segment<3>(face_idx * 3);
+                Matrix<T, 9, 9> mass_mat;
+                computeConsistentMassMatrix(undeformed_vertices, mass_mat);
+                Vector<T, 9> x_n_plus_1_vec, xn_vec, vn_vec;
+                for (int i = 0; i < 3; i++)
+                {
+                    x_n_plus_1_vec.segment<3>(i * 3) = vertices.row(i);
+                    xn_vec.segment<3>(i * 3) = xn.segment<3>(indices[i] * 3);
+                    vn_vec.segment<3>(i * 3) = vn.segment<3>(indices[i] * 3);
+                }
 
-            T xTMx = x_n_plus_1_vec.transpose() * mass_mat * x_n_plus_1_vec;
-            T xTMxn_vn_dt = 2.0 * x_n_plus_1_vec.transpose() * mass_mat * (xn_vec + vn_vec * dt);
-            kinetic_energy += (xTMx - xTMxn_vn_dt) / (2.0 * std::pow(dt, 2));
-            
-        });
+                T xTMx = x_n_plus_1_vec.transpose() * mass_mat * x_n_plus_1_vec;
+                T xTMxn_vn_dt = 2.0 * x_n_plus_1_vec.transpose() * mass_mat *
+                                (xn_vec + vn_vec * dt);
+                kinetic_energy +=
+                    (xTMx - xTMxn_vn_dt) / (2.0 * std::pow(dt, 2));
+            });
     }
     else
     {
         VectorXT x_hat = deformed - xn - vn * dt;
         VectorXT Mx_hat = density * mass_diagonal.array() * x_hat.array();
-        kinetic_energy += 0.5 * x_hat.dot(x_hat)  / dt / dt ;
+        kinetic_energy += 0.5 * x_hat.dot(x_hat) / dt / dt;
         // for (int i = 0; i < deformed.rows() / 3; i++)
         // {
         //     TV x_n_plus_1 = deformed.segment<3>(i * 3);
-        //     kinetic_energy += (density * mass_diagonal[i] * (x_n_plus_1.dot(x_n_plus_1)
-        //                                             - 2.0 * x_n_plus_1.dot(xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
-        //                                             )) / (2.0 * std::pow(dt, 2));
+        //     kinetic_energy += (density * mass_diagonal[i] *
+        //     (x_n_plus_1.dot(x_n_plus_1)
+        //                                             - 2.0 *
+        //                                             x_n_plus_1.dot(xn.segment<3>(i
+        //                                             * 3) + vn.segment<3>(i *
+        //                                             3) * dt)
+        //                                             )) / (2.0 * std::pow(dt,
+        //                                             2));
         // }
     }
-    
+
     energy += kinetic_energy;
 }
 
@@ -1027,23 +1331,28 @@ void DiscreteShell::addInertialForceEntry(VectorXT& residual)
 {
     if (use_consistent_mass_matrix)
     {
-        iterateFaceSerial([&](int face_idx)
-        {
-            FaceVtx vertices = getFaceVtxDeformed(face_idx);
-            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
-            FaceIdx indices = faces.segment<3>(face_idx * 3);
-            Matrix<T, 9, 9> mass_mat;
-            computeConsistentMassMatrix(undeformed_vertices, mass_mat);
-            Vector<T, 9> x_n_plus_1_vec, xn_vec, vn_vec;
-            for (int i = 0; i < 3; i++)
+        iterateFaceSerial(
+            [&](int face_idx)
             {
-                x_n_plus_1_vec.segment<3>(i * 3) = vertices.row(i);
-                xn_vec.segment<3>(i * 3) = xn.segment<3>(indices[i] * 3);
-                vn_vec.segment<3>(i * 3) = vn.segment<3>(indices[i] * 3);
-            }
-            Vector<T, 9> dedx = mass_mat * (2.0 * x_n_plus_1_vec - 2.0 * (xn_vec + vn_vec * dt)) / (2.0 * std::pow(dt, 2));
-            addForceEntry<3>(residual, {indices[0], indices[1], indices[2]}, -dedx);
-        });
+                FaceVtx vertices = getFaceVtxDeformed(face_idx);
+                FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+                FaceIdx indices = faces.segment<3>(face_idx * 3);
+                Matrix<T, 9, 9> mass_mat;
+                computeConsistentMassMatrix(undeformed_vertices, mass_mat);
+                Vector<T, 9> x_n_plus_1_vec, xn_vec, vn_vec;
+                for (int i = 0; i < 3; i++)
+                {
+                    x_n_plus_1_vec.segment<3>(i * 3) = vertices.row(i);
+                    xn_vec.segment<3>(i * 3) = xn.segment<3>(indices[i] * 3);
+                    vn_vec.segment<3>(i * 3) = vn.segment<3>(indices[i] * 3);
+                }
+                Vector<T, 9> dedx =
+                    mass_mat *
+                    (2.0 * x_n_plus_1_vec - 2.0 * (xn_vec + vn_vec * dt)) /
+                    (2.0 * std::pow(dt, 2));
+                addForceEntry<3>(residual, {indices[0], indices[1], indices[2]},
+                                 -dedx);
+            });
     }
     else
     {
@@ -1053,9 +1362,13 @@ void DiscreteShell::addInertialForceEntry(VectorXT& residual)
         // for (int i = 0; i < deformed.rows() / 3; i++)
         // {
         //     TV x_n_plus_1 = deformed.segment<3>(i * 3);
-        //     residual.segment<3>(i * 3) -= (density * mass_diagonal[i] * (2.0 * x_n_plus_1
-        //                                             - 2.0 * (xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
-        //                                             )) / (2.0 * std::pow(dt, 2));
+        //     residual.segment<3>(i * 3) -= (density * mass_diagonal[i] * (2.0
+        //     * x_n_plus_1
+        //                                             - 2.0 * (xn.segment<3>(i
+        //                                             * 3) + vn.segment<3>(i *
+        //                                             3) * dt)
+        //                                             )) / (2.0 * std::pow(dt,
+        //                                             2));
         // }
     }
 }
@@ -1064,21 +1377,25 @@ void DiscreteShell::addInertialHessianEntries(std::vector<Entry>& entries)
 {
     if (use_consistent_mass_matrix)
     {
-        iterateFaceSerial([&](int face_idx)
-        {
-            FaceVtx vertices = getFaceVtxDeformed(face_idx);
-            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
-            Matrix<T, 9, 9> mass_mat;
-            computeConsistentMassMatrix(undeformed_vertices, mass_mat);
-            FaceIdx indices = faces.segment<3>(face_idx * 3);
-            addHessianEntry<3, 3>(entries, {indices[0], indices[1], indices[2]}, mass_mat / std::pow(dt, 2));
-        });
+        iterateFaceSerial(
+            [&](int face_idx)
+            {
+                FaceVtx vertices = getFaceVtxDeformed(face_idx);
+                FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+                Matrix<T, 9, 9> mass_mat;
+                computeConsistentMassMatrix(undeformed_vertices, mass_mat);
+                FaceIdx indices = faces.segment<3>(face_idx * 3);
+                addHessianEntry<3, 3>(entries,
+                                      {indices[0], indices[1], indices[2]},
+                                      mass_mat / std::pow(dt, 2));
+            });
     }
     else
     {
         for (int i = 0; i < deformed.rows() / 3; i++)
         {
-            // TM hess = density * TM::Identity() * mass_diagonal[i] / std::pow(dt, 2);
+            // TM hess = density * TM::Identity() * mass_diagonal[i] /
+            // std::pow(dt, 2);
             TM hess = TM::Identity() / std::pow(dt, 2);
             addHessianEntry<3, 3>(entries, {i}, hess);
         }
@@ -1101,16 +1418,23 @@ void DiscreteShell::initializeDynamicStates()
 
 void DiscreteShell::computeMassMatrix()
 {
-    MatrixXT V; MatrixXi F;
+    MatrixXT V;
+    MatrixXi F;
     vectorToIGLMatrix<T, 3>(undeformed, V);
     vectorToIGLMatrix<int, 3>(faces, F);
     igl::massmatrix(V, F, igl::MASSMATRIX_TYPE_VORONOI, M);
-    mass_diagonal.resize(deformed.rows() / 3);
+    mass_diagonal.resize(deformed.rows());
     mass_diagonal.setZero();
-    mass_diagonal = M.diagonal();   
+    for (int i = 0; i < deformed.rows() / 3; i++)
+    {
+        mass_diagonal[i * 3 + 0] = M.coeff(i, i);
+        mass_diagonal[i * 2 + 1] = M.coeff(i, i);
+        mass_diagonal[i * 3 + 2] = M.coeff(i, i);
+    }
 }
 
-void DiscreteShell::computeConsistentMassMatrix(const FaceVtx& vtx_pos, Matrix<T, 9, 9>& mass_mat)
+void DiscreteShell::computeConsistentMassMatrix(const FaceVtx& vtx_pos,
+                                                Matrix<T, 9, 9>& mass_mat)
 {
     double m[81];
     T t1 = vtx_pos(0, 0) - vtx_pos(2, 0);
@@ -1120,7 +1444,9 @@ void DiscreteShell::computeConsistentMassMatrix(const FaceVtx& vtx_pos, Matrix<T
     T t5 = vtx_pos(1, 1) - vtx_pos(2, 1);
     T t6 = vtx_pos(1, 2) - vtx_pos(2, 2);
     T t7 = t1 * t4 + t2 * t5 + t3 * t6;
-    t1 = (pow(t1, 0.2e1) + pow(t2, 0.2e1) + pow(t3, 0.2e1)) * (pow(t4, 0.2e1) + pow(t5, 0.2e1) + pow(t6, 0.2e1)) - pow(t7, 0.2e1);
+    t1 = (pow(t1, 0.2e1) + pow(t2, 0.2e1) + pow(t3, 0.2e1)) *
+             (pow(t4, 0.2e1) + pow(t5, 0.2e1) + pow(t6, 0.2e1)) -
+         pow(t7, 0.2e1);
     t1 = sqrt(t1);
     t2 = t1 / 0.12e2;
     t1 = t1 / 0.24e2;
@@ -1212,8 +1538,6 @@ void DiscreteShell::computeConsistentMassMatrix(const FaceVtx& vtx_pos, Matrix<T
         {
             mass_mat(i, j) = m[i * 9 + j] * density;
         }
-        
     }
-    
 }
 // ============================= Dynamics End =============================

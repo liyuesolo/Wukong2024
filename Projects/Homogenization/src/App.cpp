@@ -3,6 +3,7 @@
 template<class Simulation>
 void App<Simulation>::initializeScene()
 {
+    polyscope::options::programName = "WuKongSim";
     polyscope::options::autocenterStructures = true;
     polyscope::view::windowWidth = 1024;
     polyscope::view::windowHeight = 1024;
