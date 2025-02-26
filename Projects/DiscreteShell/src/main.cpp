@@ -8,8 +8,7 @@ int main()
 {
     DiscreteShell discrete_shell;
     discrete_shell.initializeDynamicExampleScene("../../../Projects/DiscreteShell/data/grid.obj");
-    // discrete_shell.initializeNonManifoldExampleScene("../../../Projects/DiscreteShell/data/metashell.obj");
-    discrete_shell.verbose = false;
+    discrete_shell.verbose = true;
 
     
     App<DiscreteShell> app(discrete_shell);

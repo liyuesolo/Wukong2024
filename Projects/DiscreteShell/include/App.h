@@ -98,13 +98,17 @@ public:
             TV x2 = deformed_vertices.row(2);
             TV x3 = deformed_vertices.row(3);
             std::vector<glm::vec3> nodes_0 = {glm::vec3(x0[0], x0[1], x0[2])};
-            p0 = polyscope::registerPointCloud("x0", nodes_0);
+            p0 = polyscope::registerPointCloud("face vtx 0", nodes_0);
+            p0->setPointColor(glm::vec3(1, 0.4, 0));
             std::vector<glm::vec3> nodes_1 = {glm::vec3(x1[0], x1[1], x1[2])};
-            p1 = polyscope::registerPointCloud("x1", nodes_1);
+            p1 = polyscope::registerPointCloud("hinge vtx 0", nodes_1);
+            p1->setPointColor(glm::vec3(0.0, 1.0, 0.1));
             std::vector<glm::vec3> nodes_2 = {glm::vec3(x2[0], x2[1], x2[2])};
-            p2 = polyscope::registerPointCloud("x2", nodes_2);
+            p2 = polyscope::registerPointCloud("hinge vtx 1", nodes_2);
+            p2->setPointColor(glm::vec3(0.0, 1.0, 0.1));
             std::vector<glm::vec3> nodes_3 = {glm::vec3(x3[0], x3[1], x3[2])};
-            p3 = polyscope::registerPointCloud("x3", nodes_3);
+            p3 = polyscope::registerPointCloud("face vtx 1", nodes_3);
+            p3->setPointColor(glm::vec3(1, 0.4, 0));
         }
         ImGui::SameLine();
         if (ImGui::Button("next hinge"))

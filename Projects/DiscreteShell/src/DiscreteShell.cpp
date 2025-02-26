@@ -178,8 +178,10 @@ bool DiscreteShell::linearSolve(StiffnessMatrix& K, const VectorXT& residual,
 
 T DiscreteShell::computeTotalEnergy()
 {
+    if (!run_diff_test)
+        iterateDirichletDoF([&](int offset, T target)
+                            { u[offset] = target; });
     deformed = undeformed + u;
-
     T energy = 0.0;
     addShellEnergy(energy);
     if (add_gravity)
@@ -192,6 +194,9 @@ T DiscreteShell::computeTotalEnergy()
 
 T DiscreteShell::computeResidual(VectorXT& residual)
 {
+    if (!run_diff_test)
+        iterateDirichletDoF([&](int offset, T target)
+                            { u[offset] = target; });
     deformed = undeformed + u;
     addShellForceEntry(residual);
     if (add_gravity)
@@ -246,7 +251,9 @@ void DiscreteShell::computeLinearModes(MatrixXT& eigen_vectors,
 void DiscreteShell::buildSystemMatrix(StiffnessMatrix& K)
 {
     int n_dof = deformed.rows();
-
+    if (!run_diff_test)
+        iterateDirichletDoF([&](int offset, T target)
+                            { u[offset] = target; });
     deformed = undeformed + u;
     std::vector<Entry> entries;
     addShellHessianEntries(entries);
@@ -318,19 +325,14 @@ T DiscreteShell::lineSearchNewton(const VectorXT& residual)
 void DiscreteShell::initializeNonManifoldExampleScene(
     const std::string& filename)
 {
-    gravity[1] = 9.8;
+
+    T E = 1e5;
     MatrixXT V;
     MatrixXi F;
     igl::readOBJ(filename, V, F);
 
     TV min_corner = V.colwise().minCoeff();
     TV max_corner = V.colwise().maxCoeff();
-
-    T bb_diag = (max_corner - min_corner).norm();
-
-    V *= 1.0 / bb_diag;
-
-    V *= 0.5;
 
     igl::per_face_normals(V, F, face_normals);
 
@@ -341,17 +343,35 @@ void DiscreteShell::initializeNonManifoldExampleScene(
     external_force = VectorXT::Zero(deformed.rows());
 
     buildHingeStructure();
-    dynamics = true;
-    add_gravity = true;
+    dynamics = false;
+    add_gravity = false;
     use_consistent_mass_matrix = true;
     // E = 0.0;
     dt = 1.0 / 30.0;
     simulation_duration = 10000;
 
-    hinge_stiffness.setConstant(10);
+    hinge_stiffness.setConstant(1);
     if (dynamics)
     {
         initializeDynamicStates();
+    }
+
+    T dx = 0.1 * (V.colwise().maxCoeff() - V.colwise().minCoeff()).norm();
+    for (int i = 0; i < V.rows(); i++)
+    {
+        TV x = undeformed.segment<3>(i * 3);
+        if (x[0] < min_corner[0] + 1e-5)
+        {
+            dirichlet_data[i * 3] = 0;
+            dirichlet_data[i * 3 + 1] = 0;
+            dirichlet_data[i * 3 + 2] = 0;
+        }
+        if (x[0] > max_corner[0] - 1e-5)
+        {
+            dirichlet_data[i * 3] = dx;
+            dirichlet_data[i * 3 + 1] = 0;
+            dirichlet_data[i * 3 + 2] = 0;
+        }
     }
 }
 
@@ -615,7 +635,32 @@ void DiscreteShell::buildHingeStructure()
                         hinge.flaps[1] = occA.flap;
                     }
                 }
-                hinges_temp.push_back(hinge);
+                T undeformed_hinge_length =
+                    (undeformed.segment<3>(hinge.edge[0] * 3) -
+                     undeformed.segment<3>(hinge.edge[1] * 3))
+                        .norm();
+
+                T L0 = (undeformed.segment<3>(hinge.flaps[0] * 3) -
+                        undeformed.segment<3>(hinge.edge[0] * 3))
+                           .norm();
+                T L1 = (undeformed.segment<3>(hinge.flaps[1] * 3) -
+                        undeformed.segment<3>(hinge.edge[0] * 3))
+                           .norm();
+                T L2 = (undeformed.segment<3>(hinge.flaps[0] * 3) -
+                        undeformed.segment<3>(hinge.edge[1] * 3))
+                           .norm();
+                T L3 = (undeformed.segment<3>(hinge.flaps[1] * 3) -
+                        undeformed.segment<3>(hinge.edge[1] * 3))
+                           .norm();
+                T L = (undeformed.segment<3>(hinge.flaps[0] * 3) -
+                       undeformed.segment<3>(hinge.flaps[1] * 3))
+                          .norm();
+
+                T threshold = 1e-3;
+                if (undeformed_hinge_length > threshold && L0 > threshold &&
+                    L1 > threshold && L2 > threshold && L3 > threshold &&
+                    L > threshold)
+                    hinges_temp.push_back(hinge);
             }
         }
     }
@@ -889,7 +934,7 @@ void DiscreteShell::addShellInplaneHessianEntries(std::vector<Entry>& entries)
             Matrix<T, 9, 9> hessian;
             compute3DCSTShellEnergyHessian(nu, k_s, x0, x1, x2, X0, X1, X2,
                                            hessian);
-
+            projectBlockPD<9>(hessian);
             addHessianEntry<3, 3>(entries, {indices[0], indices[1], indices[2]},
                                   hessian);
         });

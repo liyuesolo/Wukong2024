@@ -5,5 +5,6 @@ add_subdirectory(MMCCells)
 add_subdirectory(Homogenization)
 add_subdirectory(IsohedralTiling)
 add_subdirectory(RodNetwork)
+add_subdirectory(FEMQuadTet)
 # this doesn't compile yet because of learning dependencies
 # add_subdirectory(NeuralMaterialModel)

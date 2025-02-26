@@ -32,5 +32,30 @@ void iglMatrixFatten(const Matrix<_type, Eigen::Dynamic, Eigen::Dynamic>& mat,
     for (int i = 0; i < n_rows; i++)
         vec.template segment<_n_col>(i * _n_col) = mat.row(i);
 }
+template <int size>
+void projectBlockPD(Eigen::Matrix<T, size, size>& symMtr)
+{
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, size, size>> eigenSolver(
+        symMtr);
+    if (eigenSolver.eigenvalues()[0] >= 0.0)
+    {
+        return;
+    }
+    Eigen::DiagonalMatrix<T, size> D(eigenSolver.eigenvalues());
+    int rows = ((size == Eigen::Dynamic) ? symMtr.rows() : size);
+    for (int i = 0; i < rows; i++)
+    {
+        if (D.diagonal()[i] < 0.0)
+        {
+            D.diagonal()[i] = 0.0;
+        }
+        else
+        {
+            break;
+        }
+    }
+    symMtr =
+        eigenSolver.eigenvectors() * D * eigenSolver.eigenvectors().transpose();
+}
 
 #endif
