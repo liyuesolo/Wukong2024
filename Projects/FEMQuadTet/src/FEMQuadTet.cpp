@@ -362,11 +362,11 @@ T FEMQuadTet::lineSearchNewton(const VectorXT& residual)
     {
         u = u_current + alpha * du;
         T E1 = computeTotalEnergy();
-        std::cout << "E0: " << E0 << " E1 " << E1 << std::endl;
+        // std::cout << "E0: " << E0 << " E1 " << E1 << std::endl;
         if (E1 - E0 < 0 || cnt > 10)
         {
-            if (cnt > 10)
-                std::cout << "cnt > 10" << std::endl;
+            // if (cnt > 10)
+            //     std::cout << "cnt > 10" << std::endl;
             break;
         }
         alpha *= 0.5;

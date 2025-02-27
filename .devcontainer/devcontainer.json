@@ -2,16 +2,16 @@
 // README at: https://github.com/devcontainers/templates/tree/main/src/cpp
 {
     /// If using the dockerhub repository (recommended), uncomment one of the following:
-    "image": "wukongsim/wukong:linux",
+    // "image": "wukongsim/wukong:linux",
     // "image": "wukongsim/wukong:mac",
     /// Instead, if building the docker image from scratch, uncomment the following two lines:
-    // "name": "WuKong2024",
-    // "dockerFile": "Dockerfile",
-    // "extensions": [
-    //     "ms-vscode.cpptools",
-    //     "twxs.cmake",
-    //     "ms-vscode.cmake-tools"
-    // ],
+    "name": "WuKong2024",
+    "dockerFile": "Dockerfile",
+    "extensions": [
+        "ms-vscode.cpptools",
+        "twxs.cmake",
+        "ms-vscode.cmake-tools"
+    ],
     "containerEnv": {
         "DISPLAY": "${localEnv:DISPLAY}"
     },
