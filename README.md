@@ -1,5 +1,8 @@
 # WuKong Codebase
 
+### Documentation
+You can find a [Work in Progress](https://liyuesolo.github.io/WuKongDoc/) documentation here.
+
 Depending on what you need you may choose to build the specific project by changing the CMakeLists.txt in the Project folder
 
 Ideally basic simulation models such as,
