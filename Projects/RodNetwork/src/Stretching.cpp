@@ -1,7 +1,6 @@
 #include "../autodiff/RodStretchingEnergy.h"
 #include "../include/RodNetwork.h"
 
-
 void RodNetwork::addStretchingHessian(std::vector<Entry>& entry_K)
 {
     for (auto& rod : rods)

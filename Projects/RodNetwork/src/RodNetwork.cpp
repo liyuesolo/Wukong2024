@@ -536,8 +536,8 @@ void RodNetwork::addCrossingPoint(std::vector<TV>& existing_nodes,
 // }
 
 void RodNetwork::addAStraightRod(const TV& from, const TV& to, int from_idx,
-                                 int to_idx, T max_segment_length, int& full_dof_cnt, int& node_cnt,
-                                 int& rod_cnt)
+                                 int to_idx, T max_segment_length,
+                                 int& full_dof_cnt, int& node_cnt, int& rod_cnt)
 {
     // Start with the rod's starting index.
     std::vector<int> node_indices;

@@ -188,7 +188,7 @@ public:
     void projectDirichletDoFMatrix(StiffnessMatrix& A,
                                     const std::unordered_map<int, T>& data);
         
-                                    std::vector<Eigen::Triplet<T>> entriesFromSparseMatrix(const Eigen::SparseMatrix<T>& A)
+    std::vector<Eigen::Triplet<T>> entriesFromSparseMatrix(const Eigen::SparseMatrix<T>& A)
     {
         std::vector<Eigen::Triplet<T>> triplets;
         for (int k = 0; k < A.outerSize(); ++k)

@@ -8,3 +8,4 @@ add_subdirectory(RodNetwork)
 add_subdirectory(FEMQuadTet)
 # this doesn't compile yet because of learning dependencies
 # add_subdirectory(NeuralMaterialModel)
+add_subdirectory(Rod2D)

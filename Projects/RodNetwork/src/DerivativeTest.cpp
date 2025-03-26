@@ -3,7 +3,9 @@
 void RodNetwork::testGradientFD()
 {
     run_diff_test = true;
-    std::cout << "======================== CHECK GRADIENT ========================" << std::endl;
+    std::cout
+        << "======================== CHECK GRADIENT ========================"
+        << std::endl;
     T epsilon = 1e-7;
     int n_dof = deformed_states.rows();
 
@@ -28,7 +30,8 @@ void RodNetwork::testGradientFD()
         T fd = (E0 - E1) / (2.0 * epsilon);
         if (std::abs(fd - gradient[i]) > 1e-3 * std::abs(gradient[i]))
         {
-            std::cout << " dof " << i << " fd " << fd << " symbolic " << gradient[i] << std::endl;
+            std::cout << " dof " << i << " fd " << fd << " symbolic "
+                      << gradient[i] << std::endl;
             std::getchar();
         }
     }
@@ -39,7 +42,9 @@ void RodNetwork::testGradientFD()
 void RodNetwork::testGradient2ndOrderTerm()
 {
     run_diff_test = true;
-    std::cout << "======================== CHECK GRADIENT ========================" << std::endl;
+    std::cout
+        << "======================== CHECK GRADIENT ========================"
+        << std::endl;
     T epsilon = 1e-6;
     int n_dof = deformed_states.rows();
 
@@ -53,7 +58,7 @@ void RodNetwork::testGradient2ndOrderTerm()
     VectorXT dq0 = dq;
     T E0 = computeTotalEnergy();
     computeResidual(gradient);
-    
+
     gradient *= -1;
     T previous = 0.0;
     for (int i = 0; i < 10; i++)
@@ -61,12 +66,12 @@ void RodNetwork::testGradient2ndOrderTerm()
         dq = dq0 + dx;
         T E1 = computeTotalEnergy();
         T dE = E1 - E0;
-        
+
         dE -= gradient.dot(dx);
         // std::cout << "dE " << dE << std::endl;
         if (i > 0)
         {
-            std::cout << (previous/dE) << std::endl;
+            std::cout << (previous / dE) << std::endl;
         }
         previous = dE;
         dx *= 0.5;
@@ -77,7 +82,9 @@ void RodNetwork::testGradient2ndOrderTerm()
 void RodNetwork::testHessian2ndOrderTerm()
 {
     run_diff_test = true;
-    std::cout << "======================== CHECK Hessian ========================" << std::endl;
+    std::cout
+        << "======================== CHECK Hessian ========================"
+        << std::endl;
     T epsilon = 1e-6;
     int n_dof = deformed_states.rows();
 
@@ -107,7 +114,7 @@ void RodNetwork::testHessian2ndOrderTerm()
         // std::cout << "df_norm " << df_norm << std::endl;
         if (i > 0)
         {
-            std::cout << (previous/df_norm) << std::endl;
+            std::cout << (previous / df_norm) << std::endl;
         }
         previous = df_norm;
         dx *= 0.5;

@@ -51,7 +51,6 @@ void RodNetwork::addBendingAndTwistingForceEntries(VectorXT& residual)
         rod->iterate3Nodes(
             [&](int node_i, int node_j, int node_k, int node_idx_local)
             {
-                
                 TV xi, xj, xk, Xi, Xj, Xk;
                 rod->x(node_i, xi);
                 rod->x(node_j, xj);
@@ -78,9 +77,10 @@ void RodNetwork::addBendingAndTwistingForceEntries(VectorXT& residual)
                     B, rod->kt, 0.0, referenceNormal1, referenceTangent1,
                     referenceNormal2, referenceTangent2, reference_twist, xk,
                     xi, xj, Xk, Xi, Xj, theta0, theta1, dedx);
-                addForceEntry<3>(
-                    residual, {node_k, node_i, node_j}, -dedx.segment<9>(0), 0);
-                int dof_theta0 = rod->theta_dof_start_offset + node_idx_local - 1;
+                addForceEntry<3>(residual, {node_k, node_i, node_j},
+                                 -dedx.segment<9>(0), 0);
+                int dof_theta0 =
+                    rod->theta_dof_start_offset + node_idx_local - 1;
                 int dof_theta1 = rod->theta_dof_start_offset + node_idx_local;
                 residual[dof_theta0] -= dedx[9];
                 residual[dof_theta1] -= dedx[10];
@@ -106,7 +106,8 @@ void RodNetwork::addBendingAndTwistingHessianEntries(
 
                 std::vector<int> nodes = {node_k, node_i, node_j};
 
-                int dof_theta0 = rod->theta_dof_start_offset + node_idx_local - 1;
+                int dof_theta0 =
+                    rod->theta_dof_start_offset + node_idx_local - 1;
                 int dof_theta1 = rod->theta_dof_start_offset + node_idx_local;
 
                 std::vector<int> theta_dofs = {dof_theta0, dof_theta1};
@@ -129,11 +130,14 @@ void RodNetwork::addBendingAndTwistingHessianEntries(
                     referenceNormal2, referenceTangent2, reference_twist, xk,
                     xi, xj, Xk, Xi, Xj, theta0, theta1, d2edx2);
                 // projectBlockPD<11>(d2edx2);
-                addHessianEntry<3, 3>(entry_K, nodes, d2edx2.block<9, 9>(0, 0), 0, 0);
-                addHessianEntry<1, 1>(entry_K, theta_dofs, d2edx2.block<2, 2>(9, 9), 0, 0);
-                addJacobianEntry<3, 1>(entry_K, nodes, theta_dofs, d2edx2.block<9, 2>(0, 9), 0);
-                addJacobianEntry<1, 3>(entry_K, theta_dofs, nodes, d2edx2.block<2, 9>(9, 0), 0);
-                
+                addHessianEntry<3, 3>(entry_K, nodes, d2edx2.block<9, 9>(0, 0),
+                                      0, 0);
+                addHessianEntry<1, 1>(entry_K, theta_dofs,
+                                      d2edx2.block<2, 2>(9, 9), 0, 0);
+                addJacobianEntry<3, 1>(entry_K, nodes, theta_dofs,
+                                       d2edx2.block<9, 2>(0, 9), 0);
+                addJacobianEntry<1, 3>(entry_K, theta_dofs, nodes,
+                                       d2edx2.block<2, 9>(9, 0), 0);
             });
     }
 }
