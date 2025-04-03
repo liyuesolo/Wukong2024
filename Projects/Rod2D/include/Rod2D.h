@@ -12,9 +12,9 @@
 #include <unordered_map>
 #include <utility>
 
-#include "VecMatDef.h"
-
 #include "Timer.h"
+#include "Util.h"
+#include "VecMatDef.h"
 
 class Rod2D
 {
@@ -29,7 +29,7 @@ public:
     using TV3 = Vector<T, 3>;
     using TV = Vector<T, 2>;
     using TM = Matrix<T, 2, 2>;
-    
+
     using IV3 = Vector<int, 3>;
     using IV = Vector<int, 2>;
     using TM3 = Matrix<T, 3, 3>;
@@ -47,8 +47,12 @@ public:
     T dt = 1.0 / 30.0;
     int simulation_duration = 1000;
     int ls_max = 10;
-
+    T kb = 1.0;
+    T ks = 1000.0;
+    // 0 1; 1 2; 2 3; 3 4; 4 5
     VectorXi rod_indices;
+
+    T density = 1.0;
 
 public:
     template <class OP>
@@ -60,17 +64,43 @@ public:
         }
     }
 
-    T computeMaterialCurvature2D(
-        const TV& x1, const TV& x2, const TV& x3)
+    T computeMaterialCurvature2D(const TV& x1, const TV& x2, const TV& x3)
     {
         TV t1 = (x2 - x1).normalized();
         TV t2 = (x3 - x2).normalized();
         return 2.0 * (t1[0] * t2[1] - t1[1] * t2[0]) / (1.0 + t1.dot(t2));
     }
 
+    template <class OP>
+    void iterateRodSegments(const OP& f)
+    {
+        for (int i = 0; i < rod_indices.rows() / 2; i++)
+        {
+            f(rod_indices[i * 2], rod_indices[i * 2 + 1], i);
+        }
+    }
+
+    template <class OP>
+    void iterateRodBendingSegments(const OP& f)
+    {
+        for (int i = 0; i < rod_indices.rows() / 2 - 1; i++)
+        {
+            f(rod_indices[i * 2], rod_indices[i * 2 + 1],
+              rod_indices[(i + 1) * 2 + 1], i);
+        }
+    }
+
 public:
     Rod2D() {}
     ~Rod2D() {}
+
+    void addInertialEnergy(T& energy);
+    void addInertialForceEntries(VectorXT& residual);
+    void addInertialHessianEntries(std::vector<Entry>& entries);
+
+    void addElasticEnergy(T& energy);
+    void addElasticForceEntries(VectorXT& residual);
+    void addElasticHessianEntries(std::vector<Entry>& entries);
 
     void initialize();
     bool advanceOneStep(int step);
