@@ -31,13 +31,14 @@ public:
         polyscope::view::windowWidth = 3000;
         polyscope::view::windowHeight = 2000;
         polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::ShadowOnly;
-        polyscope::options::groundPlaneHeightFactor = 0.; 
+        polyscope::options::groundPlaneHeightFactor = 0.6; 
         polyscope::options::shadowDarkness = 0.4;
 
         // Initialize polyscope
         polyscope::init();
-        
-        psMesh = polyscope::registerSurfaceMesh("surface mesh", simulation.surface_vertices, simulation.surface_indices);
+        vectorToIGLMatrix<T, 3>(simulation.deformed, meshV);
+        vectorToIGLMatrix<int, 3>(simulation.faces, meshF);
+        psMesh = polyscope::registerSurfaceMesh("surface mesh", meshV, meshF);
         psMesh->setSmoothShade(false);
         psMesh->setSurfaceColor(glm::vec3(0.255, 0.514, 0.996));
         psMesh->setEdgeWidth(1.0);
@@ -51,14 +52,10 @@ public:
         {
             run_sim = true;
         }
-        if (ImGui::Checkbox("VBD", &simulation.use_VBD)) 
+        if (ImGui::Button("stop")) 
         {
-            
-        }
-        if (ImGui::Checkbox("Dynamics", &simulation.dynamics)) 
-        {
-            if (simulation.dynamics)
-                simulation.initializeDynamicStates();   
+            animate_modes = false;
+            run_sim = false;
         }
         if (ImGui::Button("Animate Modes")) 
         {
@@ -68,36 +65,64 @@ public:
         {
             modes = (modes + 1) % eigen_values.rows();
         }
-        if (ImGui::Button("stop")) 
-        {
-            animate_modes = false;
-            run_sim = false;
-        }
         if (ImGui::Button("Compute Linear Modes")) 
         {
             simulation.computeLinearModes(eigen_vectors, eigen_values);   
         }
-        if (ImGui::Button("staticSolveOneStep")) 
+        if (ImGui::Button("advanceOneStep")) 
         {
             simulation.advanceOneStep(static_solve_step++);
-            psMesh = polyscope::registerSurfaceMesh("surface mesh", simulation.surface_vertices, simulation.surface_indices);
+            vectorToIGLMatrix<T, 3>(simulation.deformed, meshV);
+            psMesh->updateVertexPositions(meshV);
+            // Eigen::MatrixXd meshV;
+            // Eigen::MatrixXi meshF;
+            // vectorToIGLMatrix<int, 3>(simulation.faces, meshF);
+            // polyscope::registerSurfaceMesh("surface mesh", meshV, meshF);
         }
-        if (ImGui::Button("DerivativeTest")) 
+        if (ImGui::Button("check derivative")) 
+        {
+            simulation.checkTotalGradient(true);
+            simulation.checkTotalHessian(true);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("check derivative scale")) 
         {
             simulation.checkTotalGradientScale(true);
+            simulation.checkTotalHessianScale(true);
+        }
+        if (ImGui::Checkbox("ConsistentMass", &simulation.use_consistent_mass_matrix)) 
+        {
+            if (!simulation.use_consistent_mass_matrix)
+                simulation.computeMassMatrix();
+        }
+        if (ImGui::Checkbox("Dynamics", &simulation.dynamics)) 
+        {
+            if (simulation.dynamics)
+                simulation.initializeDynamicStates();   
+        }
+        if (ImGui::Checkbox("Gravity", &simulation.add_gravity)) 
+        {
+            
+        }
+        if (ImGui::Checkbox("Verbose", &simulation.verbose)) 
+        {
+            
         }
         if (animate_modes && !run_sim)
         {
             t += 0.1;
             simulation.deformed = simulation.undeformed + simulation.u + eigen_vectors.col(modes) * std::sin(t);
-            simulation.updateSurfaceVertices();
             
-            psMesh->updateVertexPositions(simulation.surface_vertices);
+            Eigen::MatrixXd meshV;
+            vectorToIGLMatrix<T, 3>(simulation.deformed, meshV);
+            psMesh->updateVertexPositions(meshV);
         }
         if (!animate_modes && run_sim)
         {
             bool finished = simulation.advanceOneStep(static_solve_step++);
-            psMesh->updateVertexPositions(simulation.surface_vertices);
+            Eigen::MatrixXd meshV;
+            vectorToIGLMatrix<T, 3>(simulation.deformed, meshV);
+            psMesh->updateVertexPositions(meshV);
             if (finished)
                 run_sim = false;
         }

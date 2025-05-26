@@ -1,6 +1,9 @@
 if (APPLE)
-    set(DEPS  
+    set(DEPS boost_filesystem tbb 
+        tbbmalloc tbbmalloc_proxy 
         igl::core
+        suitesparseconfig metis cholmod amd camd ccolamd colamd
+        gmp mpfr
         )
 else()
     set(DEPS boost_filesystem tbb 
@@ -12,26 +15,25 @@ else()
         )
 endif()
 
-include(FetchContent)
-FetchContent_Declare(
-    ipc_toolkit
-    GIT_REPOSITORY https://github.com/ipc-sim/ipc-toolkit.git
-    GIT_TAG v1.1.1
-    GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(ipc_toolkit)
 
 file(GLOB HEADERS "include/*.h" "autodiff/*.h")
 file(GLOB SOURCES "src/*.cpp" "autodiff/*.cpp")
 
-igl_include(copyleft tetgen)
-
 
 add_executable(IMLSContact ${HEADERS} ${SOURCES})
+add_library(IMLSContactLib STATIC ${HEADERS} ${SOURCES})
+
+
+if (APPLE)
+    find_package(CHOLMOD REQUIRED)
+    include_directories(${CHOLMOD_INCLUDES})
+    find_package(TBB REQUIRED)
+    target_link_libraries(IMLSContact ${CHOLMOD_LIBRARIES} TBB::tbb)
+endif()
+
+# find_package(Ceres REQUIRED)
 
 target_include_directories(IMLSContact PUBLIC ../../Libs/spectra/include)
-target_link_libraries(IMLSContact ${DEPS} polyscope ipc::toolkit igl_copyleft::tetgen)
-
-find_package(CHOLMOD REQUIRED)
-include_directories(${CHOLMOD_INCLUDES})
-target_link_libraries(IMLSContact ${CHOLMOD_LIBRARIES})
+target_include_directories(IMLSContact PUBLIC ../../Deps/libigl/include)
+target_include_directories(IMLSContact PUBLIC ../../Deps/geometry-central/include)
+target_link_libraries(IMLSContact ${DEPS} polyscope geometry-central)
